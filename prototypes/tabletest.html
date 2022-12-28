@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+</head>
+<body>
+
+<img src="./static/add.jpg" >
+<img src="./static/subtraction.jpg" >
+<img src="./static/rejected-64x64.png" >
+<img src="./static/lifebuoy-64x64.png" >
+<br>
+<label>Increment</label><br>
+<input type="range" id="ledlocationslide" name="ledlocation" min="0" max="910" value="0" onchange="ledlocationchange(this)"><br>
+<input type="number" step="1" pattern="\d+" id="ledlocationtext" name="fname" value="0" onchange="ledlocationchange(this)"><br>
+
+<pre id="myText" ></pre>
+
+
+    <div>
+        <p> *** OTHER STUFF HERE ***<p/>
+         <th><label id='poolname' for="say">Pool Name</label></th>
+        <table id="gable">
+            <colgroup>
+                <col class="twenty" />
+                <col class="fourty" />
+                <col class="thirtyfive" />
+                <col class="twentyfive" />
+            </colgroup>
+            <tr>
+                <th onclick="sortTable(0)"><span class="glyphicon glyphicon-sort"></span>&nbsp&nbspDEPTH</th>
+                <th onclick="sortTable(1)"><span class="glyphicon glyphicon-sort"></span>&nbsp&nbspFirstLED</th>
+                <th onclick="sortTable(2)"><span class="glyphicon glyphicon-sort"></span>&nbsp&nbspLastLED</th>
+                <th onclick="sortTable(3)"><span class="glyphicon glyphicon-sort"></span>&nbsp&nbspFeet</th>
+            </tr>
+        </table>
+    </div>
+    <script>
+        //first add an event listener for page load
+        document.addEventListener( "DOMContentLoaded", get_json_data, false ); // get_json_data is the function name that will fire on page load
+
+        //this function is in the event listener and will execute on page load
+        function get_json_data(){
+            FetchIt("http://192.168.0.134/loadpools")
+        }
+        function ledlocationchange(obj) {
+            console.log(obj.type)
+            var siblingobj;
+            if (obj.type=="range") {
+                siblingobj = document.getElementById('ledlocationtext');
+            } else {
+                siblingobj = document.getElementById('ledlocationslide');
+            }
+            siblingobj.value = obj.value
+            FetchItClean("http://192.168.0.134/IgniteLedLoc/"+obj.value)
+        }
+
+    </script>
+    
+    
+<button onclick = "gogo()">
+  click here
+</button>
+
+<script>
+  function gogo() {
+    var pools = '[{\'name\': \'Bellevue west\', \'lanes\': {\'number\': 5, \'segments\': [[[5.5, 174, 251, 6], [12, 252, 326, 15], [12, 327, 526, 21], [5.5, 527, 890, 33]]]}}, {\'name\': \'Bellevue East\', \'lanes\': {\'number\': 5, \'segments\': [[[5.5, 174, 251, 6], [12, 252, 326, 15], [12, 327, 526, 21], [5.5, 527, 890, 33]]]}}]'
+    var pools = FetchIt("http://192.168.0.134/loadpools")
+    console.log(pools)
+    document.getElementById("myText").innerHTML = JSON.stringify(pools, null, 4);
+  }
+  
+          //this function appends the json data to the table 'gable'
+        function append_json(data){
+            var table = document.getElementById('gable');
+            var label = document.getElementById('poolname');
+            
+            pool = data[0]
+            label.innerHTML = pool.name
+                for ( let y = 0; y< pool.lanes.segments.length; y++) {
+                    console.log('y:',pool.lanes.segments[y])
+               
+                var tr = document.createElement('tr');
+                var s = ""
+                for ( let x = 0; x< 4; x++) {
+                    s = s + '<td>' + pool.lanes.segments[y][x] + '</td>'
+                    console.log('x:',pool.lanes.segments[y][x])
+                }
+                tr.innerHTML = s
+                table.appendChild(tr);
+            }
+        }
+
+    function FetchItClean(params) {
+        fetch(params, {
+            method: 'GET', // or 'PUT'
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                console.log('Success:', data);
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            })
+    }
+    function FetchIt(params) {
+        fetch(params, {
+            method: 'GET', // or 'PUT'
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                console.log('Success:', data);
+                append_json(data)
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            })
+   }
+
+</script>
+</body>
+</html>
