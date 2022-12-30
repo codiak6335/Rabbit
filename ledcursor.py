@@ -40,6 +40,8 @@ class CCursor:
             self.lastPP = PrimaryPixel
 
             self.fillpip((0,0,0))
+            self.CLedStrand.draw15s()
+
 
             self.iFirstPixel = PrimaryPixel + self.iPipBase;
             self.fillpip(self.aColorSecond)

@@ -52,10 +52,17 @@ class CLedStrand:
         self.LightStrand()
 
         self.segment = 0
+        self.meter15s = None
+    
+    def draw15s(self):
+        for x in range(-2,2):
+            self.Strand[self.meter15s[0]+x-5] = (0,0,255)
+            self.Strand[self.meter15s[1]+x-5] = (0,0,255)
         
     def LightSegment(self):
         print(self.segment)
         self.Strand.fill((0,0,0))
+        self.draw15s()
 
         bsm = getBottomMap(debug)
         mark = bsm[self.segment]
@@ -78,6 +85,8 @@ class CLedStrand:
 
     def ClearStrand(self):
         self.Strand.fill((0,0,0))
+        self.draw15s()
+
         self.Strand.write()
         
 
@@ -146,12 +155,40 @@ class SwimSet:
         self.RunningMode = False
         
         self.AudioAlert = CAudioAlert()
-
+        self.meter15s = None
 
     
     def useAudio(self,flag):
         self.AudioAlert.useAudio(flag)
         
+    def qc(self, p):
+        led = 0
+        distance = 0.0
+        for sectionMap in self.BottomSectionMap:
+            if p > (distance + sectionMap[3]):
+                distance += sectionMap[3]
+            else:
+                distanceRemaining = p - distance
+                ledsinsection = sectionMap[2] - sectionMap[1]
+                ledslength = sectionMap[3] / ledsinsection
+                print(sectionMap)
+                print(distanceRemaining,sectionMap[3], distance, ledsinsection, ledslength)
+                led = int(distanceRemaining/sectionMap[3] * ledsinsection)+sectionMap[1]
+                print(led)
+                break
+        return led
+            
+    def calc15Meterlocations(self):
+        p2 = 49.2126
+        p1 = 25.7874
+        
+        self.LedStrand.meter15s = [self.qc(p1),self.qc(p2)]
+        
+        print(self.LedStrand.meter15s)
+
+        
+        
+    
     def SetBottomTimes(self, duration=120, distance = 200, interval = 180, repetitions = 20, length=25, direction=True):  # length in yards
         if direction:
             print("Near")
@@ -216,6 +253,7 @@ class SwimSet:
         print("l buffer : ", self.TimeHacks[True])
         print("l buffer : ", self.TimeHacks[False])
         
+        self.calc15Meterlocations()
         
         
 
