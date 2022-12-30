@@ -2,13 +2,15 @@ import network
 from swimset import SwimSet
 import time
 import ujson
+from display import ST7789
 
 from microdot import Microdot, redirect, send_file, Response
 import _thread
-from oled233 import OLED_2inch23
+#from oled233 import OLED_2inch23
 
 app = Microdot()
-ss = SwimSet(False)
+display = ST7789()
+ss = SwimSet(display,False)
 
 
 
@@ -19,8 +21,8 @@ def do_accessPoint():
     password = "123456789"
 
     ap = network.WLAN(network.AP_IF)
-    ap.config(essid=ssid, password=password) 
     ap.active(True)
+    ap.config(essid=ssid, password=password) 
 
     while ap.active == False:
       pass
@@ -160,18 +162,18 @@ def LoadPools(request):
     print(ps)
     return ps
 
-OLED = OLED_2inch23()
-OLED.fill(0x0000) 
-OLED.text("FTL Fish v2.0",1,2,OLED.white)
-OLED.text("Network Starting",1,12,OLED.white)
-OLED.show()
-netstr = do_accessPoint()
-#netstr = do_connect()
-OLED.fill(0x0000) 
-OLED.text("FTL Fish v2.0",1,2,OLED.white)
-OLED.text(netstr[0],1,12,OLED.white)
-OLED.text("Status: Idle",1,22,OLED.white)  
-OLED.show()
+#OLED = OLED_2inch23()
+display.fill(display.black) 
+display.text("FTL Fish v2.0",1,2,display.white)
+display.text("Network Starting",1,12,display.white)
+display.show()
+#netstr = do_accessPoint()
+netstr = do_connect()
+display.fill(display.black) 
+display.text("FTL Fish v2.0",1,2,display.white)
+display.text(netstr[0],1,12,display.white)
+display.text("Status: Idle",1,22,display.white)  
+display.show()
 
 app.run(debug=True, port=80)
     

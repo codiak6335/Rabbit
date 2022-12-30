@@ -10,7 +10,7 @@ import time
 from machine import Pin, PWM
 from audioalert import CAudioAlert
 from ledcursor import CCursor
-from oled233 import OLED_2inch23        
+from display import ST7789, Oled29       
 import json
 
 print('Micropython')
@@ -113,8 +113,8 @@ FEET = 3
 
 
 class SwimSet:
-    def __init__(self, debug=True):
-        self.OLED = OLED_2inch23()
+    def __init__(self,  display, debug=True):
+        self.display = display
         self.Direction = True
         self.dimLevel = 1  # This is a percentage
         self.STRANDLENGTH = 910
@@ -216,6 +216,8 @@ class SwimSet:
         print("l buffer : ", self.TimeHacks[True])
         print("l buffer : ", self.TimeHacks[False])
         
+        
+        
 
     def StopSet(self):
         self.RunningMode = False
@@ -307,11 +309,11 @@ class SwimSet:
         self.lastPixel = -1
         reps = 0
         while self.RunningMode and (self.repetitions==0 or reps < self.repetitions):
-            self.OLED.fill(0x0000) 
-            self.OLED.text("FTL Fish v2.0",1,2,self.OLED.white)
+            self.display.fill(self.display.black) 
+            self.display.text("FTL Fish v2.0",1,2,self.display.white)
             #self.OLED.text(netstr[0],1,12,self.OLED.white)
-            self.OLED.text(f"Status: {reps} of {self.repetitions}",1,22,self.OLED.white)  
-            self.OLED.show()
+            self.display.text(f"Status: {reps} of {self.repetitions}",1,22,self.display.white)  
+            self.display.show()
             
             
             startTime = time.ticks_ms()
@@ -336,16 +338,16 @@ class SwimSet:
                         time.sleep(restInterval)  
             
         self.Stopped = False            
-        self.OLED.fill(0x0000) 
-        self.OLED.text("FTL Fish v2.0",1,2,self.OLED.white)
+        self.display.fill(self.display.black) 
+        self.display.text("FTL Fish v2.0",1,2,self.display.white)
         #self.OLED.text(netstr[0],1,12,self.OLED.white)
-        self.OLED.text(f"Status: Idle",1,22,self.OLED.white)  
-        self.OLED.show()
+        self.display.text(f"Status: Idle",1,22,self.display.white)  
+        self.display.show()
 
 if __name__ == "__main__":
     
 
-    s = SwimSet(False)
+    s = SwimSet(ST7789(),False)
     s.LedStrand.IgniteMarkers(s.debug)
     #s.SetBottomTimes(duration=120, distance = 200, interval = 150, repetitions = 0, length=25)
     s.SetBottomTimes(duration=120, distance = 200, interval =150, repetitions = 10, length=25, direction=True)
