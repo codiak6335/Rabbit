@@ -78,6 +78,7 @@ class CLedStrand:
             
     def LightStrand(self):
         self.Strand.fill((0,0,0))
+        self.draw15s()
         for x in range(self.iLowestLed,self.iHighestLed,5):
             self.Strand[x] = (255,255,255) 
         self.Strand.write()
@@ -337,8 +338,7 @@ class SwimSet:
                 self.Cursor.Draw(self.currentPixel, self.PipOn)
             
         self.lastRepEnd = time.ticks_ms()
-        self.LedStrand.Strand.fill((0, 0, 0))
-        self.LedStrand.Strand.write()
+        self.LedStrand.Strand.ClearStrand()
 
 
     def Loop(self):
