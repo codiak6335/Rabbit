@@ -2,14 +2,14 @@ import network
 from swimset import SwimSet
 import time
 import ujson
-from display import ST7789
+import displays
 
 from microdot import Microdot, redirect, send_file, Response
 import _thread
 #from oled233 import OLED_2inch23
 
 app = Microdot()
-display = ST7789()
+display = displays.getDisplay()
 ss = SwimSet(display,False)
 
 

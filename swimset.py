@@ -10,7 +10,7 @@ import time
 from machine import Pin, PWM
 from audioalert import CAudioAlert
 from ledcursor import CCursor
-from display import ST7789, Oled29       
+import displays
 import json
 
 print('Micropython')

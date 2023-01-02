@@ -1,55 +1,59 @@
-import lcd
 from machine import Pin,SPI
 #import logo
 import gc
 import time
 import framebuf
+import os
 
+try:
+    import lcd
+    class ST7789():
+         def __init__(self):
+             
+             self.i8080 = lcd.I8080(data=(Pin(39), Pin(40), Pin(41), Pin(42), Pin(45), Pin(46), Pin(47), Pin(48)),
+                             command=Pin(7),
+                             write=Pin(8),
+                             read=Pin(9),
+                             cs=Pin(6),
+                             pclk=2 * 1000 * 1000,
+                             width=320,
+                             height=170,
+                             swap_color_bytes=False,
+                             cmd_bits=8,
+                             param_bits=8)
 
-class ST7789():
-     def __init__(self):
-         
-         self.i8080 = lcd.I8080(data=(Pin(39), Pin(40), Pin(41), Pin(42), Pin(45), Pin(46), Pin(47), Pin(48)),
-                         command=Pin(7),
-                         write=Pin(8),
-                         read=Pin(9),
-                         cs=Pin(6),
-                         pclk=2 * 1000 * 1000,
-                         width=320,
-                         height=170,
-                         swap_color_bytes=False,
-                         cmd_bits=8,
-                         param_bits=8)
+             self.st = lcd.ST7789(self.i8080, reset=Pin(5),backlight=Pin(38))
 
-         self.st = lcd.ST7789(self.i8080, reset=Pin(5),backlight=Pin(38))
+             self.st.reset()
+             self.st.init()
+             self.st.invert_color(True)
+             self.st.swap_xy(True)
+             self.st.mirror(False, True)
+             self.st.set_gap(0, 35)
 
-         self.st.reset()
-         self.st.init()
-         self.st.invert_color(True)
-         self.st.swap_xy(True)
-         self.st.mirror(False, True)
-         self.st.set_gap(0, 35)
+             self.buf = bytearray(320 * 170 * 2)
+             self.fbuf = framebuf.FrameBuffer(self.buf, 320, 170, framebuf.RGB565)
+             self.st.bitmap(0, 0, 320, 170, self.buf)
+             self.st.backlight_on()
 
-         self.buf = bytearray(320 * 170 * 2)
-         self.fbuf = framebuf.FrameBuffer(self.buf, 320, 170, framebuf.RGB565)
-         self.st.bitmap(0, 0, 320, 170, self.buf)
-         self.st.backlight_on()
+             self.white = self.st.color565(255, 255, 255)
+             self.black = self.st.color565(0, 0, 0)
 
-         self.white = self.st.color565(255, 255, 255)
-         self.black = self.st.color565(0, 0, 0)
-
-     def show(self):
-         self.st.bitmap(0, 0, 320, 170, self.buf)
+         def show(self):
+             self.st.bitmap(0, 0, 320, 170, self.buf)
+            
+         def text(self, text, x, y, color):
+             self.fbuf.text(text, x, y, color)
         
-     def text(self, text, x, y, color):
-         self.fbuf.text(text, x, y, color)
-    
-     def fill(self, color):
-         self.fbuf.fill(color)
+         def fill(self, color):
+             self.fbuf.fill(color)
+             
+except ImportError:
+    print ('ST7789 not available')
 
 class Oled29(framebuf.FrameBuffer):
      def __init__(self):
-         
+        
         DC = 8
         RST = 12
         MOSI = 11
@@ -141,11 +145,18 @@ class Oled29(framebuf.FrameBuffer):
      def fill(self, color):
          super().fill(color)
 
-
+def getDisplay():
+    display = None
+    if os.uname().machine =='Raspberry Pi Pico W with RP2040':
+        display = Oled29()
+    else:
+        display = ST7789()
+    print(display)
+    return display
 
 if __name__ == "__main__":
-    display = ST7789()
-    #display = Oled29()
+    #display = ST7789()
+    display = Oled29()
     display.fill(0)
     display.show()
     display.text("128 x 32 Pixels",1,2,display.white)
