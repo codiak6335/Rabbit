@@ -45,26 +45,27 @@ def getBottomMap(debug):
 
 class CLedStrand:
     def __init__(self, iPin, lowestLedNum, HighestLedNum):
+        self.segment = 0
+        self.meter15s = None
 
         self.Strand = neopixel.NeoPixel(machine.Pin(iPin), HighestLedNum - lowestLedNum + 1)
         self.iLowestLed = lowestLedNum
         self.iHighestLed = HighestLedNum
         self.LightStrand()
 
-        self.segment = 0
-        self.meter15s = None
     
     def draw15s(self):
-        for x in range(-2,2):
-            self.Strand[self.meter15s[0]+x-5] = (0,0,255)
-            self.Strand[self.meter15s[1]+x-5] = (0,0,255)
+        if self.meter15s != None:
+            for x in range(-2,2):
+                self.Strand[self.meter15s[0]+x-5] = (0,0,255)
+                self.Strand[self.meter15s[1]+x-5] = (0,0,255)
         
     def LightSegment(self):
         print(self.segment)
         self.Strand.fill((0,0,0))
         self.draw15s()
 
-        bsm = getBottomMap(debug)
+        bsm = getBottomMap(True)
         mark = bsm[self.segment]
         
         for x in range(mark[1], mark[2]):
@@ -78,7 +79,6 @@ class CLedStrand:
             
     def LightStrand(self):
         self.Strand.fill((0,0,0))
-        self.draw15s()
         for x in range(self.iLowestLed,self.iHighestLed,5):
             self.Strand[x] = (255,255,255) 
         self.Strand.write()
@@ -139,8 +139,7 @@ class SwimSet:
 
         self.numpix = self.STRANDLENGTH - self.FIRSTPIXEL
 
-        self.LedStrand = CLedStrand(16, 0,
-                                    self.STRANDLENGTH - 1)  # numpix -1 is actually the highest pixel index, not the number of pixels
+        self.LedStrand = CLedStrand(16, 0, self.STRANDLENGTH - 1)  # numpix -1 is actually the highest pixel index, not the number of pixels
 
 
         self.Cursor = CCursor(self.LedStrand, (255, 255, 255), (255, 0, 0), self.dimLevel)
