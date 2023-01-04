@@ -337,7 +337,7 @@ class SwimSet:
                 self.Cursor.Draw(self.currentPixel, self.PipOn)
             
         self.lastRepEnd = time.ticks_ms()
-        self.LedStrand.Strand.ClearStrand()
+        self.LedStrand.ClearStrand()
 
 
     def Loop(self):

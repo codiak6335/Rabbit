@@ -21,8 +21,9 @@ def do_accessPoint():
     password = "123456789"
 
     ap = network.WLAN(network.AP_IF)
-    ap.active(True)
+    #ap.active(True)
     ap.config(essid=ssid, password=password) 
+    ap.active(True)
 
     while ap.active == False:
       pass
@@ -164,13 +165,13 @@ def LoadPools(request):
 
 #OLED = OLED_2inch23()
 display.fill(display.black) 
-display.text("FTL Fish v2.0",1,2,display.white)
+display.text("FTL Rabbit v2.0",1,2,display.white)
 display.text("Network Starting",1,12,display.white)
 display.show()
 #netstr = do_accessPoint()
 netstr = do_connect()
 display.fill(display.black) 
-display.text("FTL Fish v2.0",1,2,display.white)
+display.text("FTL Rabbit v2.0",1,2,display.white)
 display.text(netstr[0],1,12,display.white)
 display.text("Status: Idle",1,22,display.white)  
 display.show()
