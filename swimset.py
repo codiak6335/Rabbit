@@ -344,7 +344,7 @@ class SwimSet:
         self.Stopped = False
         self.RunningMode = True
         self.lastPixel = -1
-        reps = 0
+        reps = 1
         while self.RunningMode and (self.repetitions==0 or reps < self.repetitions):
             self.display.fill(self.display.black) 
             self.display.text("FTL Fish v2.0",1,2,self.display.white)
