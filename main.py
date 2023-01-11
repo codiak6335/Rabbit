@@ -3,10 +3,14 @@ from swimset import SwimSet
 import time
 import ujson
 import displays
+from logging import getLogger, basicConfig, INFO, DEBUG
 
 from microdot import Microdot, redirect, send_file, Response
 import _thread
 #from oled233 import OLED_2inch23
+
+basicConfig(level=DEBUG,filename='log.txt', format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = getLogger()
 
 app = Microdot()
 display = displays.getDisplay()

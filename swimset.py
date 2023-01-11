@@ -12,8 +12,12 @@ from audioalert import CAudioAlert
 from ledcursor import CCursor
 import displays
 import json
+from logging import getLogger, basicConfig, INFO, DEBUG
 
-print('Micropython')
+
+logger = getLogger()
+
+logger.info('Micropython')
 
 
 class BottomContourMaps:
@@ -61,7 +65,8 @@ class CLedStrand:
                 self.Strand[self.meter15s[1]+x-5] = (0,0,255)
         
     def LightSegment(self):
-        print(self.segment)
+        logger.debug(self.segment)
+        #print(self.segment)
         self.Strand.fill((0,0,0))
         self.draw15s()
 
@@ -171,8 +176,8 @@ class SwimSet:
                 distanceRemaining = p - distance
                 ledsinsection = sectionMap[2] - sectionMap[1]
                 ledslength = sectionMap[3] / ledsinsection
-                print(sectionMap)
-                print(distanceRemaining,sectionMap[3], distance, ledsinsection, ledslength)
+                logger.debug(sectionMap)
+                logger.debug(f'{distanceRemaining}, {sectionMap[3]}, {distance}, {ledsinsection}, {ledslength}')
                 led = int(distanceRemaining/sectionMap[3] * ledsinsection)+sectionMap[1]
                 print(led)
                 break
