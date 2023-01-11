@@ -78,7 +78,7 @@ def index(request, path):
 
 @app.route('/')
 def index(request): 
-    return send_file("fish.html")
+    return send_file("rabbit.html")
 
 @app.route('/static/<path:path>')
 def static(request, path):
