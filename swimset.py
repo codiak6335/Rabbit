@@ -277,7 +277,7 @@ class SwimSet:
         
         self.Direction = not self.Direction
         self.lapcount += 1
-        if (self.currentPixel != self.lastPixel):
+        if self.currentPixel != self.lastPixel:
             self.lastPixel = self.currentPixel
             self.drawcount += 1
             self.Cursor.Draw(self.currentPixel, self.PipOn)
