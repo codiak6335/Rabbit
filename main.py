@@ -9,7 +9,7 @@ from microdot import Microdot, redirect, send_file, Response
 import _thread
 #from oled233 import OLED_2inch23
 
-basicConfig(level=DEBUG,filename='log.txt', format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+basicConfig(level=DEBUG,filename=None, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = getLogger()
 
 app = Microdot()
@@ -137,7 +137,7 @@ def second_thread():
     
 @app.route('/start')
 def start(request):
-    localstop()
+    #localstop()
     _thread.start_new_thread(second_thread,())
     return '{"msg":"Started"}'
 
@@ -172,8 +172,8 @@ display.fill(display.black)
 display.text("FTL Rabbit v2.0",1,2,display.white)
 display.text("Network Starting",1,12,display.white)
 display.show()
-netstr = do_accessPoint()
-#netstr = do_connect()
+#netstr = do_accessPoint()
+netstr = do_connect()
 display.fill(display.black) 
 display.text("FTL Rabbit v2.0",1,2,display.white)
 display.text(netstr[0],1,12,display.white)

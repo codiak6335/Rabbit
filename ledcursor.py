@@ -23,7 +23,7 @@ class CCursor:
         self.iFirstPixel = 0
         self.iPixelCount = 0
         self.lastPP = -1000
-
+        self.pixelCount = 0
 
     def fillpip(self, color):
         # print (self.iFirstPixel, self.iPixelCount)
@@ -36,7 +36,8 @@ class CCursor:
     def Draw(self, PrimaryPixel, PipOn):
         if PipOn:
             
-            print ("Primary Pixel :", PrimaryPixel)
+            #print ("Primary Pixel :", PrimaryPixel)
+            self.pixelCount += 1
             self.lastPP = PrimaryPixel
 
             self.fillpip((0,0,0))

@@ -13,10 +13,11 @@ from ledcursor import CCursor
 import displays
 import json
 from logging import getLogger, basicConfig, INFO, DEBUG
+import gc
 
 
+timescale = 1000
 logger = getLogger()
-
 logger.info('Micropython')
 
 
@@ -65,8 +66,7 @@ class CLedStrand:
                 self.Strand[self.meter15s[1]+x-5] = (0,0,255)
         
     def LightSegment(self):
-        logger.debug(self.segment)
-        #print(self.segment)
+        print(f'{self.segment}')
         self.Strand.fill((0,0,0))
         self.draw15s()
 
@@ -176,10 +176,10 @@ class SwimSet:
                 distanceRemaining = p - distance
                 ledsinsection = sectionMap[2] - sectionMap[1]
                 ledslength = sectionMap[3] / ledsinsection
-                logger.debug(sectionMap)
-                logger.debug(f'{distanceRemaining}, {sectionMap[3]}, {distance}, {ledsinsection}, {ledslength}')
+                print(f'{sectionMap}')
+                print(f'{distanceRemaining}, {sectionMap[3]}, {distance}, {ledsinsection}, {ledslength}')
                 led = int(distanceRemaining/sectionMap[3] * ledsinsection)+sectionMap[1]
-                print(led)
+                print(f'{led}')
                 break
         return led
             
@@ -189,12 +189,12 @@ class SwimSet:
         
         self.LedStrand.meter15s = [self.qc(p1),self.qc(p2)]
         
-        print(self.LedStrand.meter15s)
+        print(f'{self.LedStrand.meter15s}')
 
-        
         
     
     def SetBottomTimes(self, duration=120, distance = 200, interval = 180, repetitions = 20, length=25, direction=True):  # length in yards
+        self.ltime = 0
         if direction:
             print("Near")
         else:
@@ -206,14 +206,14 @@ class SwimSet:
         self.length = length
         self.interval = interval
         self.repetitions = repetitions
-        print(self.duration,self.distance,self.length)
+        print(f'{self.duration}, {self.distance}, {self.length}')
         self.seconds_per_length = (self.duration / (self.distance / self.length))
-        print(self.seconds_per_length,self.numpix)
+        print(f'{self.seconds_per_length}, {self.numpix}')
         self.seconds_per_pixel = (self.seconds_per_length / (self.numpix))
         self.ms_sleep = int(self.seconds_per_length * 0.99999999)
-        self.ms_per_length = self.seconds_per_length * 1000
-        self.ms_per_pixel = int(self.seconds_per_pixel * 1000)
-        self.ms_total_time = self.duration * 1000
+        self.ms_per_length = self.seconds_per_length * timescale
+        self.ms_per_pixel = int(self.seconds_per_pixel * timescale)
+        self.ms_total_time = self.duration * timescale
         
         duration = self.ms_per_length
         poolLength = self.length
@@ -222,10 +222,10 @@ class SwimSet:
         du = 0
         poolLengthInFeet = float(poolLength * 3.0)
 
-        print("duration : ", duration)
+        print(f'duration : {duration}')
         totalFeet = 0
         for section in self.BottomSectionMap:
-            print("Sections : ", section)
+            print("Sections : {section}")
             if section[LEDSTART] < self.lowestLed:
                 self.lowestLed = section[LEDSTART]
             if self.highestLed <= section[LEDEND]:
@@ -233,18 +233,19 @@ class SwimSet:
             percentageOfLength = float(float(section[FEET]) / poolLengthInFeet)
             sectionDuration = duration * percentageOfLength
 
-            sectionLedCount = section[LEDEND] - section[LEDSTART] + 1
-            ledMSStep = int(sectionDuration / sectionLedCount)
+            sectionLedCount = section[LEDEND] - section[LEDSTART]
+            ledMSStep = sectionDuration / sectionLedCount
             # print ("percentageOfLength, sectionDuration, sectionLedCount, ledMSStep : ",percentageOfLength, sectionDuration, sectionLedCount, ledMSStep)
-
-            for l in range(section[LEDSTART], section[LEDEND] + 1):
-                du = ledMSStep
-                self.ms_buffer[Led] = du
+            dusum = 0.0
+            for l in range(section[LEDSTART], section[LEDEND]):
+                du += ledMSStep
+                self.ms_buffer[Led] = int(du);
+                du = du % 1
                 Led += 1
 
         #self.ms_buffer[2] = 5000
-        print(self.FIRSTPIXEL, self.lowestLed, self.highestLed)
-        print("ms buffer : ", self.ms_buffer)
+        print(f'{self.FIRSTPIXEL}, {self.lowestLed}, {self.highestLed}')
+        print(f'ms buffer : {self.ms_buffer}')
         
         self.TimeHacks = {} 
         self.TimeHacks[True] = [0] * 1000
@@ -255,8 +256,14 @@ class SwimSet:
         for x in range(self.highestLed, self.lowestLed,-1):
             self.TimeHacks[False][x] = self.ms_buffer[x] + self.TimeHacks[False][x+1]
 
-        print("l buffer : ", self.TimeHacks[True])
-        print("l buffer : ", self.TimeHacks[False])
+
+        print(gc.mem_alloc(), gc.mem_free(), gc.collect())
+        print(gc.mem_alloc(), gc.mem_free())
+        #logger.print(f'l buffer : {self.TimeHacks[True]}')
+
+        print(gc.mem_alloc(), gc.mem_free(), gc.collect())
+        print(gc.mem_alloc(), gc.mem_free())
+#        print(f'l buffer : {self.TimeHacks[False]}")
         
         self.calc15Meterlocations()
         
@@ -265,8 +272,9 @@ class SwimSet:
     def StopSet(self):
         self.RunningMode = False
 
-
+    
     def DirectionChanged(self):
+        
         self.Direction = not self.Direction
         self.lapcount += 1
         if (self.currentPixel != self.lastPixel):
@@ -275,13 +283,17 @@ class SwimSet:
             self.Cursor.Draw(self.currentPixel, self.PipOn)
 
         t = self.ms_per_length 
-        print(f"Direction Changed : {self.lapcount} {self.ms_per_length} {time.ticks_ms()} {self.startTimeOfThisLength} {time.ticks_diff(time.ticks_ms(),self.startTimeOfThisLength)} {self.drawcount}")
+        print(f'Direction Changed : {self.lapcount} {self.ms_per_length} {time.ticks_ms()} {self.startTimeOfThisLength} {time.ticks_diff(time.ticks_ms(),self.startTimeOfThisLength)} {self.drawcount}')
         self.drawcount = 0
 
         delay = int(self.ms_per_length -  (time.ticks_ms() - self.startTimeOfThisLength))      
-        print(f"delay : {delay}")
+        print(f'delay : {delay}')
         time.sleep_ms(delay)
         self.startTimeOfThisLength = time.ticks_ms()
+        l = time.ticks_ms()
+        print(f'timehack {l-self.ltime} {self.Cursor.pixelCount}');
+        self.Cursor.pixelCount = 0
+        self.ltime = l
 
         
         
@@ -289,7 +301,7 @@ class SwimSet:
         #print(self.accumulatedTime, self.Direction, self.timeIndex, self.ms_buffer[self.timeIndex])
         returnValue = True
         currentPace = time.ticks_diff(time.ticks_ms(),self.startTimeOfThisLength) 
- #       print(f"in : {currentPace} {self.TimeHacks[True][self.currentPixel]} {self.currentPixel}")
+ #       print(f'in : {currentPace} {self.TimeHacks[True][self.currentPixel]} {self.currentPixel}")
         if self.Direction == True:
             while (currentPace > self.TimeHacks[True][self.currentPixel]):
                 self.currentPixel += 1
@@ -307,7 +319,7 @@ class SwimSet:
                     self.DirectionChanged()
                     returnValue = False
                     break
-#        print(f"out : {currentPace} {self.TimeHacks[True][self.currentPixel]} {self.currentPixel}")
+#        print(f'out : {currentPace} {self.TimeHacks[True][self.currentPixel]} {self.currentPixel}")
         return returnValue
 
             
@@ -320,8 +332,8 @@ class SwimSet:
         if self.Direction == False:
             self.timeIndex = self.maxtimeindex
 
-        print("Direction Change : ", self.Direction)
-        print(f"Rep starting: {self.currentPixel}")
+        print(f'Direction Change : {self.Direction}')
+        print(f'Rep starting: {self.currentPixel}')
         self.AudioAlert.Beep()
 
         s = time.ticks_ms() #Pycharm needs a *1000
@@ -349,12 +361,12 @@ class SwimSet:
         self.Stopped = False
         self.RunningMode = True
         self.lastPixel = -1
-        reps = 1
+        reps = 0
         while self.RunningMode and (self.repetitions==0 or reps < self.repetitions):
             self.display.fill(self.display.black) 
             self.display.text("FTL Fish v2.0",1,2,self.display.white)
             #self.OLED.text(netstr[0],1,12,self.OLED.white)
-            self.display.text(f"Status: {reps} of {self.repetitions}",1,22,self.display.white)  
+            self.display.text(f'Status: {reps} of {self.repetitions}',1,22,self.display.white)  
             self.display.show()
             
             
@@ -366,24 +378,24 @@ class SwimSet:
                 reps += 1;
                 
                 elapsedTime = time.ticks_diff(time.ticks_ms(),startTime)
-                print (self.interval, elapsedTime)
-                restInterval = (self.interval*1000 - elapsedTime) / 1000
+                print(f'{self.interval}, {elapsedTime}')
+                restInterval = (self.interval*timescale - elapsedTime) / timescale
 
-                print(f"{reps} of {self.repetitions} repetitions completed.")
+                print(f'{reps} of {self.repetitions} repetitions completed.')
                 
                 if restInterval < 0 :
-                    print("Slow poke, elapsedTime exceeded the interval!")  # should validate this on input and not allow it to happen
-                    print("No rest for you!")
+                    print('Slow poke, elapsedTime exceeded the interval!')  # should validate this on input and not allow it to happen
+                    print('No rest for you!')
                 else:
                     if reps < self.repetitions:
-                        print("Resting Interval : ", restInterval)
+                        print(f'Resting Interval : {restInterval}')
                         time.sleep(restInterval)  
             
         self.Stopped = False            
         self.display.fill(self.display.black) 
         self.display.text("FTL Fish v2.0",1,2,self.display.white)
         #self.OLED.text(netstr[0],1,12,self.OLED.white)
-        self.display.text(f"Status: Idle",1,22,self.display.white)  
+        self.display.text("Status: Idle",1,22,self.display.white)  
         self.display.show()
 
 if __name__ == "__main__":
