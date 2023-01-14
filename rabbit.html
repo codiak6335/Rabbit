@@ -3,179 +3,206 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <head>
-  <title>Rabbit</title>
-  <link rel="stylesheet" media="all" href="static/rabbit.css">
+    <title>Rabbit</title>
+    <link rel="stylesheet" media="all" href="static/rabbit.css">
 </head>
 
 <body>
 
 <img src="static/FTL_320x.jpg" style="width:100%;"/>
-<div id="ControlAPixelDiv" style="width:100%;display:none;margin-right: -50%;" >
+<div id="ControlAPixelDiv" style="width:100%;display:none;margin-right: -50%;">
     <label>Increment</label><br>
-    <input type="range" id="ledlocationslide" name="ledlocation" min="0" max="910" value="0" onchange="ledlocationchange(this)" style="width:100%"><br>
-    <input type="number" step="1" pattern="\d+" id="ledlocationtext" name="fname" value="0" onchange="ledlocationchange(this)"><br>
+    <input type="range" id="ledlocationslide" name="ledlocation" min="0" max="910" value="0"
+           onchange="ledlocationchange(this)" style="width:100%"><br>
+    <input type="number" step="1" pattern="\d+" id="ledlocationtext" name="fname" value="0"
+           onchange="ledlocationchange(this)"><br>
 
-  <button id="capcanelBtn" onclick="mainmenuIt()" class="button-prep pure-button" style="width:100%" >Cancel</button><br><br>
+    <button id="capcanelBtn" onclick="mainmenuIt()" class="button-prep pure-button" style="width:100%">Cancel</button>
+    <br><br>
 </div>
 <div id="mainmenuDiv" style="width:100%">
-  <button id="runsetsBtn" onclick="runIt()" class="button-prep pure-button" style="width:100%" >Run Sets</button><br><br>
-  <button id="settingsBtn" onclick="setIt()" class="button-prep pure-button" style="width:100%" >Settings</button><br><br>
-  <button id="LightStrandBtn" onclick="FetchIt('/LightStrand')" class="button-prep pure-button" style="width:100%" >Light the Strand</button><br><br>
-  <button id="LightSegmentBtn" onclick="FetchIt('/LightSegment')" class="button-prep pure-button" style="width:100%" >Light the Segment</button><br><br>
-  <button id="LightPixelBtn" onclick="ControlAPixelIt()" class="button-prep pure-button" style="width:100%" >Control a Pixel</button><br><br>
-  <button id="ClearStrandBtn" onclick="FetchIt('/ClearStrand')" class="button-prep pure-button" style="width:100%" >Clear the Strand</button><br><br>
+    <button id="runsetsBtn" onclick="runIt()" class="button-prep pure-button" style="width:100%">Run Sets</button>
+    <br><br>
+    <button id="settingsBtn" onclick="setIt()" class="button-prep pure-button" style="width:100%">Settings</button>
+    <br><br>
+    <button id="LightStrandBtn" onclick="FetchIt('/LightStrand')" class="button-prep pure-button" style="width:100%">
+        Light the Strand
+    </button>
+    <br><br>
+    <button id="LightSegmentBtn" onclick="FetchIt('/LightSegment')" class="button-prep pure-button" style="width:100%">
+        Light the Segment
+    </button>
+    <br><br>
+    <button id="LightPixelBtn" onclick="ControlAPixelIt()" class="button-prep pure-button" style="width:100%">Control a
+        Pixel
+    </button>
+    <br><br>
+    <button id="ClearStrandBtn" onclick="FetchIt('/ClearStrand')" class="button-prep pure-button" style="width:100%">
+        Clear the Strand
+    </button>
+    <br><br>
 </div>
 
 <div id="PrepDiv" style="width:100%;display:none;">
-  <form action="" method="GET" id="form1" onsubmit="return PrepIt(this);" >
-    <table style="width:100%">
-      <tr>
-        <th><label for="say">Pool</label></th>
-        <th><input name="pool" id="pool" value="Bellevue East" style="font-size: 44px;"/></th>
-      </tr>
-      <tr>
-        <th><label for="say">Lane</label></th>
-        <th><input name="lane" id="lane" value="5"  style="font-size: 44px;"/></th>
-      </tr>
-      <tr>
-        <th><label for="say">Start (Near/Far)</label></th>
-        <th><input name="direction" id="direction" value="Near"  style="font-size: 44px;"/></th>
-      </tr>
+    <form action="" method="GET" id="form1" onsubmit="return PrepIt(this);">
+        <table style="width:100%">
+            <tr>
+                <th><label for="say">Pool</label></th>
+                <th><input name="pool" id="pool" value="Bellevue East" style="font-size: 44px;"/></th>
+            </tr>
+            <tr>
+                <th><label for="say">Lane</label></th>
+                <th><input name="lane" id="lane" value="5" style="font-size: 44px;"/></th>
+            </tr>
+            <tr>
+                <th><label for="say">Start (Near/Far)</label></th>
+                <th><input name="direction" id="direction" value="Near" style="font-size: 44px;"/></th>
+            </tr>
 
-      <tr>
-        <th><label for="say">Audio</label></th>
-        <th><input name="audio" id="audio" value="yes"  style="font-size: 44px;"/></th>
-      </tr>
-      <tr>
-        <th><label for="say">Duration</label></th>
-        <th><input name="duration" id="duration" value="120"  style="font-size: 44px;"/></th>
-      </tr>
-      <tr>
-        <th><label for="to">Distance</label></th>
-        <th><input name="distance" id="distance" value="200"  style="font-size: 44px;"/></th>
-      </tr>
-      <tr>
-        <th><label for="to">Repetitions</label></th>
-        <th><input name="repetitions" id="repetitions" value="20"  style="font-size: 44px;"/></th>
-      </tr>
-      <tr>
-        <th><label for="to">Intervals</label></th>
-        <th><input name="interval" id="interval" value="150"  style="font-size: 44px;"/></th>
-      </tr>
-    </table>
-  </form>
-  <button id="prepBtn" onclick="PrepIt()" class="button-prep pure-button" style="width:100%" >Prep Button</button><br><br>
-  <button id="doneBtn" onclick="mainmenuIt()" class="button-stop pure-button-primary">Done Button</button><br><br>
+            <tr>
+                <th><label for="say">Audio</label></th>
+                <th><input name="audio" id="audio" value="yes" style="font-size: 44px;"/></th>
+            </tr>
+            <tr>
+                <th><label for="say">Duration</label></th>
+                <th><input name="duration" id="duration" value="120" style="font-size: 44px;"/></th>
+            </tr>
+            <tr>
+                <th><label for="to">Distance</label></th>
+                <th><input name="distance" id="distance" value="200" style="font-size: 44px;"/></th>
+            </tr>
+            <tr>
+                <th><label for="to">Repetitions</label></th>
+                <th><input name="repetitions" id="repetitions" value="20" style="font-size: 44px;"/></th>
+            </tr>
+            <tr>
+                <th><label for="to">Intervals</label></th>
+                <th><input name="interval" id="interval" value="150" style="font-size: 44px;"/></th>
+            </tr>
+        </table>
+    </form>
+    <button id="prepBtn" onclick="PrepIt()" class="button-prep pure-button" style="width:100%">Prep Button</button>
+    <br><br>
+    <button id="doneBtn" onclick="mainmenuIt()" class="button-stop pure-button-primary">Done Button</button>
+    <br><br>
 </div>
 
 <div id="StartDiv" style="display:none;">
-  <button id="stopBtn" onclick="CancelIt()" class="button-stop pure-button-primary">Cancel Button</button><br><br>
-  <button id="startBtn" onclick="StartIt()"  class="button-start pure-button-primary">Start Button</button><br><br>
+    <button id="stopBtn" onclick="CancelIt()" class="button-stop pure-button-primary">Cancel Button</button>
+    <br><br>
+    <button id="startBtn" onclick="StartIt()" class="button-start pure-button-primary">Start Button</button>
+    <br><br>
 </div>
 <div id="StopDiv" style="display:none;">
-  <button id="stopBtn" onclick="StopIt()" class="button-stop pure-button">Stop Button</button><br><br>
+    <button id="stopBtn" onclick="StopIt()" class="button-stop pure-button">Stop Button</button>
+    <br><br>
 </div>
 
 <div id="setDiv" style="display:none;">
-  <button id="doneBtn" onclick="mainmenuIt()" class="button-stop pure-button-primary">Done Button</button><br><br>
+    <button id="doneBtn" onclick="mainmenuIt()" class="button-stop pure-button-primary">Done Button</button>
+    <br><br>
 </div>
 
 <script>
 
-        function ledlocationchange(obj) {
-            console.log(obj.type)
-            var siblingobj;
-            if (obj.type=="range") {
-                siblingobj = document.getElementById('ledlocationtext');
-            } else {
-                siblingobj = document.getElementById('ledlocationslide');
-            }
-            siblingobj.value = obj.value
-            FetchIt("IgniteLedLoc/"+obj.value)
+    function ledlocationchange(obj) {
+        console.log(obj.type)
+        var siblingobj;
+        if (obj.type == "range") {
+            siblingobj = document.getElementById('ledlocationtext');
+        } else {
+            siblingobj = document.getElementById('ledlocationslide');
         }
+        siblingobj.value = obj.value
+        FetchIt("IgniteLedLoc/" + obj.value)
+    }
 
-  function mainmenuIt(form) {
-    document.getElementById("setDiv").style.display = "none";
-    document.getElementById("PrepDiv").style.display = "none";
-    document.getElementById("ControlAPixelDiv").style.display = "none";
-    document.getElementById("mainmenuDiv").style.display = "inline";
-  }
+    function mainmenuIt(form) {
+        document.getElementById("setDiv").style.display = "none";
+        document.getElementById("PrepDiv").style.display = "none";
+        document.getElementById("ControlAPixelDiv").style.display = "none";
+        document.getElementById("mainmenuDiv").style.display = "inline";
+    }
 
-  function ControlAPixelIt() {
-    document.getElementById("setDiv").style.display = "none";
-    document.getElementById("PrepDiv").style.display = "none";
-    document.getElementById("mainmenuDiv").style.display = "none";
-    document.getElementById("ControlAPixelDiv").style.display = "inline";
+    function ControlAPixelIt() {
+        document.getElementById("setDiv").style.display = "none";
+        document.getElementById("PrepDiv").style.display = "none";
+        document.getElementById("mainmenuDiv").style.display = "none";
+        document.getElementById("ControlAPixelDiv").style.display = "inline";
 
-  }
+    }
 
-  function runIt() {
-    document.getElementById("PrepDiv").style.display = "inline";
-    document.getElementById("mainmenuDiv").style.display = "none";
-  }
-  function setIt() {
-    document.getElementById("setDiv").style.display = "inline";
-    document.getElementById("mainmenuDiv").style.display = "none";
-    FetchIt("/ignitemarkers")
-  }
-  function PrepIt(form1) {
-    const data = { username: 'example' };
-    form1 = document.getElementById("form1");
-    let params = "/prep?"
-      + "pool=" + form1.pool.value
-      + "&lane=" + form1.lane.value
-      + "&audio=" + form1.audio.value
-      + "&duration=" + form1.duration.value
-      + "&distance=" + form1.distance.value
-      + "&repetitions=" + form1.repetitions.value
-      + "&intervals=" + form1.interval.value
-      + "&direction=" + form1.direction.value
+    function runIt() {
+        document.getElementById("PrepDiv").style.display = "inline";
+        document.getElementById("mainmenuDiv").style.display = "none";
+    }
 
-    fetch(params, {
-      method: 'GET', // or 'PUT'
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log('Success:', data);
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-      });
+    function setIt() {
+        document.getElementById("setDiv").style.display = "inline";
+        document.getElementById("mainmenuDiv").style.display = "none";
+        FetchIt("/ignitemarkers")
+    }
 
-    document.getElementById("PrepDiv").style.display = "none";
-    document.getElementById("StartDiv").style.display = "inline";
+    function PrepIt(form1) {
+        const data = {username: 'example'};
+        form1 = document.getElementById("form1");
+        let params = "/prep?"
+            + "pool=" + form1.pool.value
+            + "&lane=" + form1.lane.value
+            + "&audio=" + form1.audio.value
+            + "&duration=" + form1.duration.value
+            + "&distance=" + form1.distance.value
+            + "&repetitions=" + form1.repetitions.value
+            + "&intervals=" + form1.interval.value
+            + "&direction=" + form1.direction.value
 
-  }
+        fetch(params, {
+            method: 'GET', // or 'PUT'
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                console.log('Success:', data);
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+
+        document.getElementById("PrepDiv").style.display = "none";
+        document.getElementById("StartDiv").style.display = "inline";
+
+    }
 
 
-  function FetchIt(params) {
-    fetch(params, {
-      method: 'GET', // or 'PUT'
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log('Success:', data);
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-      });
-  }
-  function CancelIt(form) {
-    document.getElementById("PrepDiv").style.display = "inline";
-    document.getElementById("StartDiv").style.display = "none";
-    FetchIt("/stop")
-  }
-  function StartIt() {
-    document.getElementById("StartDiv").style.display = "none";
-    document.getElementById("StopDiv").style.display = "inline";
-    FetchIt("/start")
-  }
+    function FetchIt(params) {
+        fetch(params, {
+            method: 'GET', // or 'PUT'
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                console.log('Success:', data);
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+    }
 
-  function StopIt() {
-    document.getElementById("StopDiv").style.display = "none";
-    document.getElementById("PrepDiv").style.display = "inline";
-    FetchIt("/stop")
-  }
+    function CancelIt(form) {
+        document.getElementById("PrepDiv").style.display = "inline";
+        document.getElementById("StartDiv").style.display = "none";
+        FetchIt("/stop")
+    }
+
+    function StartIt() {
+        document.getElementById("StartDiv").style.display = "none";
+        document.getElementById("StopDiv").style.display = "inline";
+        FetchIt("/start")
+    }
+
+    function StopIt() {
+        document.getElementById("StopDiv").style.display = "none";
+        document.getElementById("PrepDiv").style.display = "inline";
+        FetchIt("/stop")
+    }
 
 </script>
 

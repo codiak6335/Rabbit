@@ -1,23 +1,22 @@
-import network 
-from swimset import SwimSet
-import time
-import ujson
-import displays
-from logging import getLogger, basicConfig, INFO, DEBUG
-
-from microdot import Microdot, redirect, send_file, Response
 import _thread
-#from oled233 import OLED_2inch23
+import time
+from logging import getLogger, basicConfig, DEBUG
 
-basicConfig(level=DEBUG,filename=None, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+import network
+import ujson
+
+import displays
+from microdot import Microdot, send_file
+from swimset import SwimSet
+
+# from oled233 import OLED_2inch23
+
+basicConfig(level=DEBUG, filename=None, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = getLogger()
 
 app = Microdot()
 display = displays.getDisplay()
-ss = SwimSet(display,False)
-
-
-
+ss = SwimSet(display, False)
 
 
 def do_accessPoint():
@@ -25,16 +24,17 @@ def do_accessPoint():
     password = "123456789"
 
     ap = network.WLAN(network.AP_IF)
-    #ap.active(True)
-    ap.config(essid=ssid, password=password) 
+    # ap.active(True)
+    ap.config(essid=ssid, password=password)
     ap.active(True)
 
     while ap.active == False:
-      pass
+        pass
 
     print("Access point active")
     print(ap.ifconfig())
     return ap.ifconfig()
+
 
 def do_connect():
     SSID = 'beaver'
@@ -49,40 +49,42 @@ def do_connect():
             pass
     print('network config:', sta_if.ifconfig())
     return sta_if.ifconfig()
-    
+
+
 def debug(request):
-    print (request.args)
-    print (request.url)
-    print (request.method)
-    print (request.app)
-    print (request.client_addr)
-    print (request.method)
-    print (request.url)
-    print (request.query_string)
-    print (request.headers)
-    print (request.cookies)
-    print (request.content_length)
-    print (request.content_type)
-    print (request.g)
+    print(request.args)
+    print(request.url)
+    print(request.method)
+    print(request.app)
+    print(request.client_addr)
+    print(request.method)
+    print(request.url)
+    print(request.query_string)
+    print(request.headers)
+    print(request.cookies)
+    print(request.content_length)
+    print(request.content_type)
+    print(request.g)
 
 
 @app.route('/IgniteLedLoc/<path:path>')
-def IgniteLedLoc(request,path):
-
+def IgniteLedLoc(request, path):
     print("path : ", path)
     debug(request)
     ss.LedStrand.IgniteLedLoc(int(path))
-    
+
     return '{"msg":"Lit"}'
 
 
 @app.route('/prototypes/<path:path>')
-def index(request, path): 
-    return send_file('prototypes/'+path)
+def index(request, path):
+    return send_file('prototypes/' + path)
+
 
 @app.route('/')
-def index(request): 
+def index(request):
     return send_file("rabbit.html")
+
 
 @app.route('/static/<path:path>')
 def static(request, path):
@@ -95,33 +97,36 @@ def static(request, path):
 @app.route('/prep')
 def prep(request):
     print("Prepping")
-    #localstop()
+    # localstop()
     print(request.args)
-    print (request.args['audio'])
-    print (request.args['duration'][0])
-    ss.SetBottomTimes(int(request.args['duration']),int(request.args['distance']),int(request.args['intervals']),int(request.args['repetitions']),25,request.args['direction']=="Near")
+    print(request.args['audio'])
+    print(request.args['duration'][0])
+    ss.SetBottomTimes(int(request.args['duration']), int(request.args['distance']), int(request.args['intervals']),
+                      int(request.args['repetitions']), 25, request.args['direction'] == "Near")
     ss.useAudio(request.args['audio'])
     return '{"msg":"Prepped"}'
+
 
 @app.route('/stop')
 def stop(request):
     localstop()
     return '{"msg":"Stopped"}'
 
+
 @app.route('/ClearStrand')
 def ClearStrand(request):
     ss.LedStrand.ClearStrand()
     return '{"msg":"Cleared"}'
 
+
 @app.route('/LightStrand')
 def LightStrand(request):
-    
     ss.LedStrand.LightStrand()
     return '{"msg":"StrandLit"}'
 
+
 @app.route('/LightSegment')
 def LightSegment(request):
-    
     ss.LedStrand.LightSegment()
     return '{"msg":"SegmentLit"}'
 
@@ -134,11 +139,12 @@ def ignitemarkers(request):
 def second_thread():
     ss.LedStrand.ClearStrand()
     ss.Loop()
-    
+
+
 @app.route('/start')
 def start(request):
-    #localstop()
-    _thread.start_new_thread(second_thread,())
+    # localstop()
+    _thread.start_new_thread(second_thread, ())
     return '{"msg":"Started"}'
 
 
@@ -147,41 +153,39 @@ def localstop():
         print("stopping")
         ss.StopSet()
         i = 0
-        while not ss.Stopped and i<20:
-            time.sleep(0.1)   #give the thread a chance to exit cleanly
+        while not ss.Stopped and i < 20:
+            time.sleep(0.1)  # give the thread a chance to exit cleanly
             i += 1
         print("Stopped")
 
     else:
         print("Not running")
 
+
 @app.route('/loadpools')
 def LoadPools(request):
     pools_filename = "/data/Pools.json"
-    f = open(pools_filename,'r')
-    settings_string=f.read()
+    f = open(pools_filename, 'r')
+    settings_string = f.read()
     f.close()
-    n = settings_string.replace("\'","\"")
+    n = settings_string.replace("\'", "\"")
     pools = ujson.loads(n)
-    ps = str(pools).replace("\'","\"")
+    ps = str(pools).replace("\'", "\"")
     print(ps)
     return ps
 
-#OLED = OLED_2inch23()
-display.fill(display.black) 
-display.text("FTL Rabbit v2.0",1,2,display.white)
-display.text("Network Starting",1,12,display.white)
+
+# OLED = OLED_2inch23()
+display.fill(display.black)
+display.text("FTL Rabbit v2.0", 1, 2, display.white)
+display.text("Network Starting", 1, 12, display.white)
 display.show()
-#netstr = do_accessPoint()
+# netstr = do_accessPoint()
 netstr = do_connect()
-display.fill(display.black) 
-display.text("FTL Rabbit v2.0",1,2,display.white)
-display.text(netstr[0],1,12,display.white)
-display.text("Status: Idle",1,22,display.white)  
+display.fill(display.black)
+display.text("FTL Rabbit v2.0", 1, 2, display.white)
+display.text(netstr[0], 1, 12, display.white)
+display.text("Status: Idle", 1, 22, display.white)
 display.show()
 
 app.run(debug=True, port=80)
-    
-
-
- 

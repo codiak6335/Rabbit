@@ -1,15 +1,16 @@
-from machine import Pin, PWM
+from machine import Pin
 from utime import sleep
+
 
 class CAudioAlert:
     def __init__(self):
         self.alertDelay = 2.5
         self.speaker = Pin(15, Pin.OUT)
         self.tonesOn = True
-        
+
     def useAudio(self, flag):
         self.tonesOn = (flag == "yes")
-        print("Audio status : ",self.tonesOn)
+        print("Audio status : ", self.tonesOn)
 
     def Beep(self):
         if self.tonesOn:
@@ -28,4 +29,3 @@ class CAudioAlert:
         else:
             print("audio not working")
             self.alertDelay = 2.5
-

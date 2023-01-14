@@ -1,8 +1,6 @@
 import ujson
 
 
-
-
 class CPool:
     def __init__(self, data):
         self.__dict__ = data
@@ -11,9 +9,9 @@ class CPool:
         self.lanes["number"] = lane_number
         self.lanes["segments"] = segments
 
-
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)
+
 
 class CPools:
     def __init__(self):
@@ -23,10 +21,7 @@ class CPools:
     def SavePools(self):
         with open(self.pools_filename, 'w') as file:
             for pool in self.pools:
-                file.write(str(pool.__dict__)+'\n')
-                
-
-
+                file.write(str(pool.__dict__) + '\n')
 
     def LoadPools(self):
 
@@ -38,7 +33,7 @@ class CPools:
 
                 n = settings_string.replace("\'", "\"")
 
-                print("[",n,"]")
+                print("[", n, "]")
                 uj = ujson.loads(n)
                 print(uj)
                 p = CPool(uj)
@@ -46,42 +41,39 @@ class CPools:
 
         return self.pools
 
+    #        f = open(pools_filename,'r')
+    #        settings_string=f.read()
+    #        f.close()
+    ##        n = settings_string.replace("\'","\"")
+    #        print(n)
+    #        pools = ujson.loads(n)
+    #        for pool in pools:
+    #            print(pool)
+    #        print(pools)
+    #        return pools
 
-
-#        f = open(pools_filename,'r')
-#        settings_string=f.read()
-#        f.close()
-##        n = settings_string.replace("\'","\"")
-#        print(n)
-#        pools = ujson.loads(n)
-#        for pool in pools:
-#            print(pool)
-#        print(pools)
-#        return pools
-
-
-    def AddPool(self,p):
+    def AddPool(self, p):
         self.pools.append(p)
-        
-    def SavePool(self,p):
+
+    def SavePool(self, p):
         with open(pools_filename, 'w+') as file:
-            file.write(str(pool.__dict__)+',')
-            
-    def DeletePool(self,p):
+            file.write(str(pool.__dict__) + ',')
+
+    def DeletePool(self, p):
         return
 
+
 if __name__ == "__main__":
-    
-    
+
     pools = CPools()
     lp = pools.LoadPools()
     print("list")
-    
+
     for p in lp:
-        print (p.__dict__)
-        
+        print(p.__dict__)
+
     pools.SavePools()
-    
+
 """    
     pool = CPool("Bellevue East")
     pool.addLane(5, [[5.5, 174, 251, 6], [12, 252, 326, 15], [12, 327, 526, 21], [5.5, 527, 890, 33]])
@@ -100,5 +92,3 @@ if __name__ == "__main__":
     pools.AddPool(pool)
 
 """
-    
-
