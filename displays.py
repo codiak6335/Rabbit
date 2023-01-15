@@ -5,11 +5,12 @@ import time
 import framebuf
 from machine import Pin, SPI
 
+# noinspection PyUnresolvedReferences
 try:
     import lcd
 
 
-    class ST7789():
+    class ST7789:
         def __init__(self):
             self.i8080 = lcd.I8080(data=(Pin(39), Pin(40), Pin(41), Pin(42), Pin(45), Pin(46), Pin(47), Pin(48)),
                                    command=Pin(7),
@@ -33,7 +34,7 @@ try:
             self.st.set_gap(0, 35)
 
             self.buf = bytearray(320 * 170 * 2)
-            self.fbuf = framebuf.FrameBuffer(self.buf, 320, 170, framebuf.RGB565)
+            self.framebuf = framebuf.FrameBuffer(self.buf, 320, 170, framebuf.RGB565)
             self.st.bitmap(0, 0, 320, 170, self.buf)
             self.st.backlight_on()
 
@@ -44,15 +45,16 @@ try:
             self.st.bitmap(0, 0, 320, 170, self.buf)
 
         def text(self, text, x, y, color):
-            self.fbuf.text(text, x, y, color)
+            self.framebuf.text(text, x, y, color)
 
         def fill(self, color):
-            self.fbuf.fill(color)
+            self.framebuf.fill(color)
 
 except ImportError:
     print('ST7789 not available')
 
 
+# noinspection PyPep8Naming
 class Oled29(framebuf.FrameBuffer):
     def __init__(self):
 
@@ -96,7 +98,7 @@ class Oled29(framebuf.FrameBuffer):
         self.cs(1)
 
     def init_display(self):
-        """Initialize dispaly"""
+        """Initialize display"""
         self.rst(1)
         time.sleep(0.001)
         self.rst(0)
@@ -129,7 +131,7 @@ class Oled29(framebuf.FrameBuffer):
         self.write_cmd(0x12)
         self.write_cmd(0xDB)  # set vcomh
         self.write_cmd(0x08)  # Set VCOM Deselect Level
-        self.write_cmd(0xAF);  # -Set Page Addressing Mode (0x00/0x01/0x02)
+        self.write_cmd(0xAF)  # -Set Page Addressing Mode (0x00/0x01/0x02)
 
     def show(self):
         for page in range(0, 4):
@@ -147,17 +149,18 @@ class Oled29(framebuf.FrameBuffer):
         super().fill(color)
 
 
-def getDisplay():
-    display = None
+def get_display():
+    _display = None
     if os.uname().machine == 'Raspberry Pi Pico W with RP2040':
-        display = Oled29()
+        _display = Oled29()
     else:
-        display = ST7789()
-    print(display)
-    return display
+        _display = ST7789()
+    print(_display)
+    return _display
 
 
 if __name__ == "__main__":
+
     # display = ST7789()
     display = Oled29()
     display.fill(0)

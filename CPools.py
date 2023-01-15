@@ -3,9 +3,10 @@ import ujson
 
 class CPool:
     def __init__(self, data):
+        self.lanes = None
         self.__dict__ = data
 
-    def addLane(self, lane_number, segments):
+    def add_lane(self, lane_number, segments):
         self.lanes["number"] = lane_number
         self.lanes["segments"] = segments
 
@@ -18,12 +19,12 @@ class CPools:
         self.pools_filename = "/data/Pools.json"
         self.pools = []
 
-    def SavePools(self):
+    def save(self):
         with open(self.pools_filename, 'w') as file:
             for pool in self.pools:
                 file.write(str(pool.__dict__) + '\n')
 
-    def LoadPools(self):
+    def load(self):
 
         self.pools = []
 
@@ -36,43 +37,22 @@ class CPools:
                 print("[", n, "]")
                 uj = ujson.loads(n)
                 print(uj)
-                p = CPool(uj)
-                self.pools.append(p)
+                pool = CPool(uj)
+                self.pools.append(pool)
 
         return self.pools
-
-    #        f = open(pools_filename,'r')
-    #        settings_string=f.read()
-    #        f.close()
-    ##        n = settings_string.replace("\'","\"")
-    #        print(n)
-    #        pools = ujson.loads(n)
-    #        for pool in pools:
-    #            print(pool)
-    #        print(pools)
-    #        return pools
-
-    def AddPool(self, p):
-        self.pools.append(p)
-
-    def SavePool(self, p):
-        with open(pools_filename, 'w+') as file:
-            file.write(str(pool.__dict__) + ',')
-
-    def DeletePool(self, p):
-        return
 
 
 if __name__ == "__main__":
 
     pools = CPools()
-    lp = pools.LoadPools()
+    lp = pools.load()
     print("list")
 
     for p in lp:
         print(p.__dict__)
 
-    pools.SavePools()
+    pools.save()
 
 """    
     pool = CPool("Bellevue East")

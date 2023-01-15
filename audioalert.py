@@ -8,11 +8,11 @@ class CAudioAlert:
         self.speaker = Pin(15, Pin.OUT)
         self.tonesOn = True
 
-    def useAudio(self, flag):
+    def use_audio(self, flag):
         self.tonesOn = (flag == "yes")
         print("Audio status : ", self.tonesOn)
 
-    def Beep(self):
+    def beep(self):
         if self.tonesOn:
             print("audio working")
             self.speaker.value(1)
