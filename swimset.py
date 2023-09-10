@@ -6,7 +6,6 @@
 import gc
 import json
 import time
-from logging import getLogger
 
 import machine
 import neopixel
@@ -17,8 +16,6 @@ from audioalert import CAudioAlert
 from ledcursor import CCursor
 
 timescale = 1000
-logger = getLogger()
-logger.info('Micropython')
 
 
 class BottomContourMaps:
@@ -274,7 +271,6 @@ class SwimSet:
 
         print(gc.mem_alloc(), gc.mem_free(), gc.collect())
         print(gc.mem_alloc(), gc.mem_free())
-        # logger.print(f'l buffer : {self.TimeHacks[True]}')
 
         print(gc.mem_alloc(), gc.mem_free(), gc.collect())
         print(gc.mem_alloc(), gc.mem_free())
@@ -333,7 +329,7 @@ class SwimSet:
         #        print(f'out : {current_pace} {self.TimeHacks[True][self.currentPixel]} {self.currentPixel}")
         return return_value
 
-    def rep(self):
+    def rep(self, threeBeeps=True):
         self.PipOn = True
 
         self.maxtimeindex = self.highestLed
@@ -343,7 +339,7 @@ class SwimSet:
 
         print(f'Direction Change : {self.Direction}')
         print(f'Rep starting: {self.currentPixel}')
-        self.AudioAlert.beep()
+        self.AudioAlert.beeps(threeBeeps)
 
         start_time = time.ticks_ms()  # Pycharm needs a *1000
         self.staticStartTime = start_time
@@ -405,6 +401,42 @@ class SwimSet:
         # self.OLED.text(netstr[0],1,12,self.OLED.white)
         self.display.text("Status: Idle", 1, 22, self.display.white)
         self.display.show()
+
+
+
+
+    def sprintloop(self):
+        self.Stopped = False
+        self.RunningMode = True
+        self.lastPixel = -1
+        reps = 0
+        direction = self.Direction
+        while self.RunningMode:
+            self.display.fill(self.display.black)
+            self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
+            # self.OLED.text(netstr[0],1,12,self.OLED.white)
+            self.display.text(f'Infinite Sprint Mode', 1, 22, self.display.white)
+            self.display.show()
+
+            start_time = time.ticks_ms()
+            self.rep(threeBeeps=False)
+            self.Direction = direction
+            if self.RunningMode:
+                reps += 1
+
+                elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
+                print(f'{self.interval}, {elapsed_time}')
+                rest_interval = (self.interval * timescale - elapsed_time) / timescale
+
+                print(f'{reps} repetitions completed.')
+
+        self.Stopped = False
+        self.display.fill(self.display.black)
+        self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
+        # self.OLED.text(netstr[0],1,12,self.OLED.white)
+        self.display.text("Status: Idle", 1, 22, self.display.white)
+        self.display.show()
+
 
 
 if __name__ == "__main__":

@@ -1,0 +1,105 @@
+      /* Center the buttons vertically */
+      main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        /*justify-content: center; */
+        min-height: 100vh; /* Set a minimum height */
+        margin: 0; /* Remove default margin */
+    }
+
+    nav ul {
+        list-style: none;
+        padding: 0;
+        text-align: center; /* Center the text within each button */
+    }
+
+    nav li {
+        margin-bottom: 10px; /* Adjust spacing between buttons */
+    }
+
+   .left-aligned-label {
+        text-align: left;
+    }
+    .text-entry {
+        width: 100%;
+        padding: 2px 2px;
+        margin: 2px 0;
+        box-sizing: border-box;
+        font-size: 16px;
+    }
+
+   .selection {
+        width: 100%;
+        padding: 2px 2px;
+        margin: 2px 0;
+        box-sizing: border-box;
+        font-size: 16px;
+    }
+
+            /* Style the buttons */
+    .button-prep {
+        width: 100%;
+        background-color: rgb(0, 0, 200); /* Button background color */
+        color: white; /* Button text color */
+        border: none; /* Remove button border */
+        border-radius: 50px; /* Rounded corners */
+        padding: 20px; /* Add padding for better appearance */
+        cursor: pointer; /* Add pointer cursor on hover */
+        font-size: 26px;
+    }
+.div-prs {
+display:inline-block;
+width: 50%;
+align-items: center;
+}
+.button-prep2 {
+        width: 60%;
+        background-color: rgb(0, 0, 200); /* Button background color */
+        color: white; /* Button text color */
+        border: none; /* Remove button border */
+        border-radius: 50px; /* Rounded corners */
+        padding: 20px; /* Add padding for better appearance */
+        cursor: pointer; /* Add pointer cursor on hover */
+        margin-bottom: 4px;
+        margin-top: 4px;
+font-size: 26px;
+
+    }
+
+    .button-prep:hover {
+        background-color: darkblue; /* Darker background color on hover */
+    }
+
+    hr {
+        border: none;
+        border-top: 2px solid black; /* Set the color and thickness of the line */
+        margin: 10px 0; /* Adjust the margin to control the spacing above and below the line */
+    }
+
+    /* Add responsive styles for smaller screens */
+    @media screen and (max-width: 768px) {
+        /* Adjust your header and navigation styles for mobile */
+        header {
+            /* Mobile-specific styles */
+        }
+        nav {
+            /* Mobile-specific styles */
+        }
+    }
+
+    /* Maximize the logo */
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+
+    /* Center the navigation horizontally */
+    header {
+        display: flex;
+
+        align-items: center;
+    }
+
+
+

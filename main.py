@@ -1,6 +1,6 @@
 import _thread
 import time
-from logging import getLogger, basicConfig, DEBUG
+import sys
 
 import network
 import ujson
@@ -10,9 +10,6 @@ from microdot import Microdot, send_file
 from swimset import SwimSet
 
 # from oled233 import OLED_2inch23
-
-basicConfig(level=DEBUG, filename=None, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = getLogger()
 
 app = Microdot()
 display = displays.get_display()
@@ -67,6 +64,11 @@ def debug(request):
     print(request.content_type)
     print(request.g)
 
+@app.route('/saveaslastled/<path:path>')
+def save_as_last_led(request, path):
+    with open('/db/lastled.dat', "w") as file1:
+        file1.write(f"{int(path)}")
+    return '{"msg":"saved"}'
 
 @app.route('/IgniteLedLoc/<path:path>')
 def ignite_led_location(request, path):
@@ -83,33 +85,137 @@ def index(request, path):
     return send_file('prototypes/' + path)
 
 
+
 # noinspection PyUnusedLocal
 @app.route('/')
 def index(request):
-    return send_file("rabbit.html")
+    return send_file('rabbit.html')
+
+@app.route('/favicon.ico')
+def index(request):
+    return send_file('favicon.ico')
 
 
-# noinspection PyUnusedLocal
-@app.route('/static/<path:path>')
-def static(request, path):
-    if '..' in path:
-        # directory traversal is not allowed
-        return 'Not found', 404
-    return send_file('static/' + path)
+def string_to_seconds(input_str):
+    try:
+        # Split the input string into components
+        components = input_str.split(':')
+
+        if len(components) == 1:
+            # Only seconds and fractions provided
+            seconds_parts = components[0].split('.')
+            if len(seconds_parts) == 2:
+                seconds = float(seconds_parts[0])
+                fractions = float(seconds_parts[1])
+            else:
+                seconds = float(seconds_parts[0])
+                fractions = 0.0  # If no fractions provided, assume 0.0 seconds
+            total_seconds = seconds + (fractions / 100.0)
+
+        elif len(components) == 2:
+            # Minutes and seconds provided
+            minutes = float(components[0])
+            seconds_parts = components[1].split('.')
+            if len(seconds_parts) == 2:
+                seconds = float(seconds_parts[0])
+                fractions = float(seconds_parts[1])
+            else:
+                seconds = float(seconds_parts[0])
+                fractions = 0.0  # If no fractions provided, assume 0.0 seconds
+            total_seconds = (minutes * 60) + seconds + (fractions / 100.0)
+
+        elif len(components) == 3:
+            # Hours, minutes, seconds, and fractions provided
+            hours = float(components[0])
+            minutes = float(components[1])
+            seconds_parts = components[2].split('.')
+            if len(seconds_parts) == 2:
+                seconds = float(seconds_parts[0])
+                fractions = float(seconds_parts[1])
+            else:
+                seconds = float(seconds_parts[0])
+                fractions = 0.0  # If no fractions provided, assume 0.0 seconds
+            total_seconds = (hours * 3600) + (minutes * 60) + seconds + (fractions / 100.0)
+
+        else:
+            raise ValueError("Input does not have a valid format.")
+
+        return total_seconds
+
+    except ValueError as e:
+        print(f"Error: {e}")
+        return None
+
+# Example usage:
+#input_string = "01:23:45.67"
+#seconds_float = string_to_seconds(input_string)
+#if seconds_float is not None:
+    #print(f"Converted value: {seconds_float:.2f} seconds")
 
 
 # noinspection SpellCheckingInspection
 @app.route('/prep')
 def prep(request):
-    print("Prepping")
+    print("Prepping ")
     # local_stop()
     print(request.args)
     print(request.args['audio'])
     print(request.args['duration'][0])
-    ss.set_bottom_times(int(request.args['duration']), int(request.args['distance']), int(request.args['intervals']),
+    ss.set_bottom_times()
+    print(int(string_to_seconds(request.args['duration'])))
+    print(int(string_to_seconds(request.args['interval'])))
+    ss.set_bottom_times(int(string_to_seconds(request.args['duration'])), int(request.args['distance']), int(string_to_seconds(request.args['interval'])),
                         int(request.args['repetitions']), 25, request.args['direction'] == "Near")
-    ss.use_audio(request.args['audio'])
+#    ss.use_audio(request.args['audio'])
     return '{"msg":"Prepped"}'
+
+
+# noinspection PyUnusedLocal
+@app.route('/db/<path:path>', methods=['GET', 'POST'])
+def db(request, path):
+    print("db ", path)
+    if '..' in path:
+    # directory traversal is not allowed
+        return 'Not found', 404
+    if request.method == 'GET':
+        return send_file("/db/"+path)
+    elif request.method == 'POST':
+        print(request.body)
+        with open('/db/'+path, "w") as json_file:
+            json_file.write(request.body)
+            
+        return '{"msg":"Saved"}'
+    
+    
+
+# noinspection PyUnusedLocal
+@app.route('/css/<path:path>')
+def css(request, path):
+    print("css ", path)
+    if '..' in path:
+    # directory traversal is not allowed
+        return 'Not found', 404
+    return send_file("/css/"+path)
+
+# noinspection PyUnusedLocal
+@app.route('/js/<path:path>')
+def css(request, path):
+    print("js ", path)
+    if '..' in path:
+    # directory traversal is not allowed
+        return 'Not found', 404
+    return send_file("/js/"+path)
+
+
+
+# noinspection PyUnusedLocal
+@app.route('/static/<path:path>')
+def static(request, path):
+    print("static ", path)
+    if '..' in path:
+    # directory traversal is not allowed
+        return 'Not found', 404
+    return send_file("/static/"+path)
 
 
 # noinspection PyUnusedLocal
@@ -158,6 +264,17 @@ def start(request):
     _thread.start_new_thread(second_thread, ())
     return '{"msg":"Started"}'
 
+def sprint_second_thread():
+    ss.LedStrand.clear_strand()
+    ss.sprintloop()
+
+# noinspection PyUnresolvedReferences,PyUnusedLocal
+@app.route('/startsprint')
+def startsprint(request):
+    # local_stop()
+    _thread.start_new_thread(sprint_second_thread, ())
+    return '{"msg":"Started"}'
+
 
 def local_stop():
     if not ss.Stopped:
@@ -186,6 +303,12 @@ def load_pools(request):
     print(ps)
     return ps
 
+
+# noinspection PyUnusedLocal,SpellCheckingInspection
+@app.route('/HardReset')
+def hardreset(request):
+    machine.reset()
+    return "{msg:reset}"
 
 # OLED = OLED_2inch23()
 display.fill(display.black)

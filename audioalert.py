@@ -12,19 +12,20 @@ class CAudioAlert:
         self.tonesOn = (flag == "yes")
         print("Audio status : ", self.tonesOn)
 
-    def beep(self):
+    def beeps(self, threeBeeps=True):
         if self.tonesOn:
-            print("audio working")
+            if threeBeeps:
+                print("audio working")
+                self.speaker.value(1)
+                sleep(0.15)
+                self.speaker.value(0)
+                sleep(0.85)
+                self.speaker.value(1)
+                sleep(0.15)
+                self.speaker.value(0)
+                sleep(0.85)
             self.speaker.value(1)
             sleep(0.15)
-            self.speaker.value(0)
-            sleep(0.85)
-            self.speaker.value(1)
-            sleep(0.15)
-            self.speaker.value(0)
-            sleep(0.85)
-            self.speaker.value(1)
-            sleep(0.50)
             self.speaker.value(0)
         else:
             print("audio not working")
