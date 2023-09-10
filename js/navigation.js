@@ -214,10 +214,10 @@ function FetchPools() {
         })
         .then(data => {
             console.log(data)
-            for (const schoolName in data.schools) {
+            for (const schoolName in data.pools) {
             
-            console.log(data.schools)
-              if (data.schools.hasOwnProperty(schoolName)) {
+            console.log(data.pools)
+              if (data.pools.hasOwnProperty(schoolName)) {
                   const option = document.createElement("option");
                   option.text = schoolName;
                   console.log("Appending:")

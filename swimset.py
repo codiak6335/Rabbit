@@ -35,10 +35,82 @@ class BottomContourMaps:
             r = json.dumps(get_bottom_map())
             f.write(r)
 
+class poolDefinitions:
+    def _init__(self):
+        self.bcms = []
+        self.load()
+
+    def load(self):
+        with open('/db/pools.json', 'rt') as f:
+            # noinspection PyTypeChecker
+            self.bcms = json.load(f)
+        return self.bcms
+    
+class PoolData:
+    def __init__(self, filename):
+        self.filename = filename
+        self.data = self.load_data()
+
+    def load_data(self):
+        try:
+            with open(self.filename, 'r') as file:
+                return json.load(file)
+        except FileNotFoundError:
+            print(f"File '{self.filename}' not found.")
+            return {}
+
+    def get_pool_data(self, pool_name):
+        if pool_name in self.data.get('pools', {}):
+            return self.data['pools'][pool_name]
+        else:
+            return None
+
+    def get_corrected_bcm(self, pool_name):
+        pool = self.get_pool_data(pool_name)
+
+        PixelCount = pool['PixelCount']
+        Segments = pool['Segments']
+
+        MaxPixels = 0
+        with open('/db/lastled.dat', "r") as file:
+            content = file.readline()
+            print(f"lastled = {content}")
+            MaxPixels = int(content)
+
+        bcm = []
+        print(PixelCount)
+        for segment in Segments:
+            s = [0,0,0,0,0]
+            s[0] = 0
+            s[1] = segment['FirstPixel']
+            s[2] = PixelCount
+            s[3] = segment['Distance']
+            print(s)
+            bcm.append(s)
+
+        for i in range(len(bcm) - 1):
+            bcm[i][2] = bcm[i + 1][1] - 1
+        for i in range(len(bcm)):
+            bcm[i][4] = bcm[i][2]-bcm[i][1]
+
+        finalBcm = [row[:] for row in bcm]
+
+        for i in range(len(bcm)-1, -1, -1):
+            finalBcm[i][2] = MaxPixels
+            MaxPixels = MaxPixels - finalBcm[i][4]
+            finalBcm[i][1] = MaxPixels
+            MaxPixels = MaxPixels - 1
+            del finalBcm[i][4]
+
+        print(bcm)
+        print(finalBcm)
+        return finalBcm
 
 def get_bottom_map():
-    bcm = BottomContourMaps()
-    return bcm.load()
+    pools = PoolData('./db/pools.json')
+    bcm = pools.get_corrected_bcm('Bellevue East / West')
+    print(bcm)
+    return bcm
 
 
 #    bsm = BottomSectionMap = [[5.5, 0, 10, 75]]
