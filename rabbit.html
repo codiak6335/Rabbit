@@ -146,7 +146,7 @@ header("Expires: 0"); // Proxies
         </nav>
 </div>
 
-<div id="controlapixel" style="display:none">
+<div id="controlapixel" style="display:none; text-align: center;">
     <button id="cpReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: inline-block">Return</button>
     <br>
     <label>Increment</label><br>
@@ -154,6 +154,9 @@ header("Expires: 0"); // Proxies
                                                  onchange="ledlocationchange(this)" style="width:100%"><br>
     <label for="ledlocationtext"></label><input type="number" step="1" pattern="\d+" id="ledlocationtext" name="fname" value="0"
                                                 onchange="ledlocationchange(this)"><br>
+
+    <button id="plus" onclick="adjustLedLocation(1)" class="button-prep2 pure-button" >+</button>
+    <button id="minux" onclick="adjustLedLocation(-1)" class="button-prep2 pure-button" >-</button>
 
     <button id="setlastled" onclick="saveaslastled()" class="button-prep2 pure-button" >Set as last LED</button>
 </div>

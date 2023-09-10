@@ -344,3 +344,12 @@ function FetchPoolsOld() {
         callApi("/IgniteLedLoc/" + obj.value)
     }
 
+    function adjustLedLocation(increment) {
+      var siblingobj = document.getElementById('ledlocationtext');
+      var currentValue = parseInt(siblingobj.value, 10); // Parse the current value as an integer
+      var newValue = currentValue + increment; // Add or subtract based on the 'increment' parameter
+      siblingobj.value = newValue; // Update the element's value
+      ledlocationchange(siblingobj)
+}
+
+
