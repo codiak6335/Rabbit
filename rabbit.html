@@ -1,8 +1,11 @@
 <?php
-// Send no-cache headers
-header("Pragma: no-cache");
-header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+// Prevent caching
+header("Cache-Control: no-cache, must-revalidate"); // HTTP 1.1
+header("Pragma: no-cache"); // HTTP 1.0
+header("Expires: 0"); // Proxies
 ?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,7 +24,7 @@ header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 
     <header> <img src="static/FTL_320x.jpg" alt="Logo"> </header>
     <hr>
-    <div id='mainmenu' style="display:block">
+    <div id="mainmenu" style="display:block">
         <nav>
             <ul>
                 <li><button onclick="showdiv('paceset')" class="button-prep2 pure-button">Pace Set</button></li>
@@ -125,7 +128,7 @@ header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 <div id="poolmanagement" style="display:none; text-align: center;">
     <h1 style="margin: 0 auto;">Edit and Submit JSON</h1>
 
-    <button id="ReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Return</button>
+    <button id="pmReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Return</button>
     <textarea id="jsonTextarea" rows="10" cols="50" style="margin: 0 auto;"></textarea>
     <button onclick="fetchAndLoadJSON()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Reload JSON</button>
     <button onclick="submitJSON()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Submit JSON</button>
@@ -144,7 +147,7 @@ header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 </div>
 
 <div id="controlapixel" style="display:none">
-    <button id="ReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: inline-block">Return</button>
+    <button id="cpReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: inline-block">Return</button>
     <br>
     <label>Increment</label><br>
     <label for="ledlocationslide"></label><input type="range" id="ledlocationslide" name="ledlocation" min="0" max="910" value="0"
