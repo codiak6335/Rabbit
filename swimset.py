@@ -71,7 +71,7 @@ class PoolData:
         PixelCount = pool['PixelCount']
         Segments = pool['Segments']
 
-        MaxPixels = 0
+        MaxPixels = 0 
         with open('/db/lastled.dat', "r") as file:
             content = file.readline()
             print(f"lastled = {content}")
@@ -293,9 +293,9 @@ class SwimSet:
         self.length = length
         self.interval = interval
         self.repetitions = repetitions
-        print(f'{self.duration}, {self.distance}, {self.length}')
+        print(f'dur-dis-lenth {self.duration}, {self.distance}, {self.length}')
         self.seconds_per_length = (self.duration / (self.distance / self.length))
-        print(f'{self.seconds_per_length}, {self.numpix}')
+        print(f'secs per length - numpix {self.seconds_per_length}, {self.numpix}')
         self.seconds_per_pixel = (self.seconds_per_length / self.numpix)
         self.ms_sleep = int(self.seconds_per_length * 0.99999999)
         self.ms_per_length = self.seconds_per_length * timescale
