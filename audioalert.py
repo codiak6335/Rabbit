@@ -9,7 +9,7 @@ class CAudioAlert:
         self.tonesOn = True
 
     def use_audio(self, flag):
-        self.tonesOn = (flag == "yes")
+        self.tonesOn = (flag == "Yes")
         print("Audio status : ", self.tonesOn)
 
     def beeps(self, threeBeeps=True):
@@ -29,4 +29,4 @@ class CAudioAlert:
             self.speaker.value(0)
         else:
             print("audio not working")
-            self.alertDelay = 2.5
+            self.alertDelay = 2.15

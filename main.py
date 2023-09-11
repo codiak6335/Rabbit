@@ -166,7 +166,7 @@ def prep(request):
     print(float(string_to_seconds(request.args['interval'])))
     ss.set_bottom_times(float(string_to_seconds(request.args['duration'])), int(request.args['distance']), float(string_to_seconds(request.args['interval'])),
                         int(request.args['repetitions']), 25, request.args['direction'] == "Near")
-#    ss.use_audio(request.args['audio'])
+    ss.use_audio(request.args['audio'])
     return '{"msg":"Prepped"}'
 
 
@@ -315,8 +315,8 @@ display.fill(display.black)
 display.text("FTL Rabbit v2.0", 1, 2, display.white)
 display.text("Network Starting", 1, 12, display.white)
 display.show()
-# netstr = do_access_point()
-netstr = do_connect()
+netstr = do_access_point()
+#netstr = do_connect()
 display.fill(display.black)
 display.text("FTL Rabbit v2.0", 1, 2, display.white)
 display.text(netstr[0], 1, 12, display.white)
