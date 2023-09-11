@@ -115,7 +115,7 @@ header("Expires: 0"); // Proxies
             <th><input name="duration" id="ssduration" value="0:10.0" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
         </tr>
     </table>
-
+ 
     <label for="interval"></label><input name="interval" id="ssinterval" value="00.00" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
     <label for="distance"></label><input name="distance" id="ssdistance" value="25" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
     <label for="repetitions"></label><input name="repetitions" id="ssrepetitions" value="25" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
@@ -128,10 +128,10 @@ header("Expires: 0"); // Proxies
 <div id="poolmanagement" style="display:none; text-align: center;">
     <h1 style="margin: 0 auto;">Edit and Submit JSON</h1>
 
-    <button id="pmReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Return</button>
+    <button id="pmReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Return</button>
     <textarea id="jsonTextarea" rows="10" cols="50" style="margin: 0 auto;"></textarea>
-    <button onclick="fetchAndLoadJSON()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Reload JSON</button>
-    <button onclick="submitJSON()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Submit JSON</button>
+    <button onclick="fetchAndLoadJSON()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Reload JSON</button>
+    <button onclick="submitJSON()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Submit JSON</button>
 </div>
 
 <div id="ledcontrols" style="display:none">
