@@ -6,7 +6,7 @@
       "password": "password"
     },
     {
-      "active": 1,
+      "active": 0,
       "ssid": "ssid-2",
       "password": "password"
     }
