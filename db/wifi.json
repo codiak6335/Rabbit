@@ -1,7 +1,7 @@
 {
   "wifis": [
     {
-      "active": 0,
+      "active": 1,
       "ssid": "ssid-1",
       "password": "password"
     },
