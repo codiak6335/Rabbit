@@ -15,16 +15,19 @@ function showdiv(newdiv) {
         addValuesToPoolsSelect('pools');
     } else if (newdiv === "sprintset") {
         addValuesToPoolsSelect('sspools');
-    } else if (newdiv === 'poolmanagement') {
-        console.log('here I am')
-            fetchAndLoadJSON();
     }
-
 
     currentDivId = document.getElementById(newdiv);
     currentDivId.style.display = 'block'
     
-    
+    if (newdiv === 'poolmanagement') {
+        console.log('show div here I am')
+        fetchAndLoadJSON('pmjsonTextarea','/db/pools.json');
+    } else if (newdiv === 'networkmanagement') {
+        console.log('show dive here I am')
+        fetchAndLoadJSON('nwjsonTextarea','/db/wifi.json')
+    }
+
 }
 
 
@@ -284,20 +287,21 @@ function FetchPoolsOld() {
     }
 
     // Call the function to add values to the "pools" select element
-    function fetchAndLoadJSON() {
-            fetch('/db/pools.json', {method: 'GET'}) // Replace with your JSON file URL
-                .then(response => response.json())
-                .then(data => {
-                    // Load the JSON content into the textarea
-                    document.getElementById('jsonTextarea').value = JSON.stringify(data, null, 2);
-                })
-                .catch(error => console.error('Error fetching JSON:', error));
-        }
-
+function fetchAndLoadJSON(textareaId, jsonFilename) {
+    fetch(jsonFilename, { method: 'GET' })
+        .then(response => response.json())
+        .then(data => {
+            const jsonTextarea = document.getElementById(textareaId);
+            console.log(jsonTextarea)
+            jsonTextarea.value = JSON.stringify(data, null, 2);
+        })
+        .catch(error => console.error('Error fetching JSON:', error));
+}
+ 
     // Function to submit the edited JSON
-    function submitJSON() {
+    function submitJSON(textarea,filename) {
         console.log('submitting')
-        const editedJSON = document.getElementById('jsonTextarea').value;
+        const editedJSON = document.getElementById(textarea).value;
 
         // Parse the edited JSON
         try {
@@ -307,7 +311,7 @@ function FetchPoolsOld() {
 
             // Example: Send the edited JSON to a server using fetch
             
-            fetch('/db/pools.json', {
+            fetch(filename, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

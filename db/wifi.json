@@ -1,0 +1,14 @@
+{
+  "wifis": [
+    {
+      "active": 0,
+      "ssid": "ssid-1",
+      "password": "password"
+    },
+    {
+      "active": 1,
+      "ssid": "ssid-2",
+      "password": "password"
+    }
+  ]
+}

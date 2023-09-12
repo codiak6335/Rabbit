@@ -4,6 +4,7 @@ import sys
 
 import network
 import ujson
+import machine
 
 import displays
 from microdot import Microdot, send_file
@@ -17,7 +18,14 @@ ss = SwimSet(display, False)
 
 
 def do_access_point():
-    ssid = "PicoW"
+    mac_address_bytes = machine.unique_id()
+
+    # Convert the bytes to a formatted string
+    mac_address_str = ":".join(["{:02X}".format(byte) for byte in mac_address_bytes])
+
+    # Print the MAC address
+    print("MAC Address:", mac_address_str)
+    ssid = "Rabbit-" + mac_address_str
     password = "123456789"
 
     ap = network.WLAN(network.AP_IF)
@@ -30,23 +38,53 @@ def do_access_point():
 
     print("Access point active")
     print(ap.ifconfig())
-    return ap.ifconfig()
+    return ap
 
+def do_connection_management():
+    # make sure we are not connected
+    ap = network.WLAN(network.AP_IF)
+    ap.disconnect()
+    ap.active(False)
 
-# noinspection SpellCheckingInspection
-def do_connect():
-    ssid = 'beaver'
-    key = 'joanieandcharlielovealex'
-    import network
-    sta_if = network.WLAN(network.STA_IF)
-    if not sta_if.isconnected():
-        print('connecting to network...')
-        sta_if.active(True)
-        sta_if.connect(ssid, key)
-        while not sta_if.isconnected():
-            pass
-    print('network config:', sta_if.ifconfig())
-    return sta_if.ifconfig()
+    wlan = network.WLAN(network.STA_IF)
+    wlan.disconnect()
+    wlan.active(False)
+    time.sleep(3)
+
+    profiles = read_profiles('/db/wifi.json')
+    for wifi in profiles:
+        if wifi['active'] != 0:
+            wlan = do_connect(wifi['ssid'], wifi['password'])
+            if wlan.isconnected():
+                break
+
+    if not wlan.isconnected():
+        wlan = do_access_point()
+    return wlan.ifconfig()
+
+def read_profiles(filename):
+    with open(filename, 'r') as json_file:
+        data = ujson.load(json_file)
+
+    print(data['wifis'])        
+    return data['wifis']
+
+def do_connect(ssid, password):
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    print('Trying to connect to %s...' % ssid)
+    wlan.connect(ssid, password)
+    for retry in range(100):
+        connected = wlan.isconnected()
+        if connected:
+            break
+        time.sleep(0.1)
+        print('.', end='')
+    if connected:
+        print('\nConnected. Network config: ', wlan.ifconfig())
+    else:
+        print('\nFailed. Not Connected to: ' + ssid)
+    return wlan
 
 
 def debug(request):
@@ -89,7 +127,7 @@ def index(request, path):
 # noinspection PyUnusedLocal
 @app.route('/')
 def index(request):
-    return send_file('rabbit.html')
+    return send_file('index.html')
 
 @app.route('/favicon.ico')
 def index(request):
@@ -301,7 +339,7 @@ def load_pools(request):
     pools = ujson.loads(n)
     ps = str(pools).replace("\'", "\"")
     print(ps)
-    return ps
+    return ps 
 
 
 # noinspection PyUnusedLocal,SpellCheckingInspection
@@ -315,8 +353,8 @@ display.fill(display.black)
 display.text("FTL Rabbit v2.0", 1, 2, display.white)
 display.text("Network Starting", 1, 12, display.white)
 display.show()
-netstr = do_access_point()
-#netstr = do_connect()
+#netstr = do_access_point()
+netstr = do_connection_management()
 display.fill(display.black)
 display.text("FTL Rabbit v2.0", 1, 2, display.white)
 display.text(netstr[0], 1, 12, display.white)

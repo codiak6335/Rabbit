@@ -24,12 +24,31 @@ header("Expires: 0"); // Proxies
 
     <header> <img src="static/FTL_320x.jpg" alt="Logo"> </header>
     <hr>
+    <div id="poolmanagement" style="display:none; text-align: center;">
+        <h1 style="margin: 0 auto;">Edit and Submit JSON</h1>
+
+        <button id="pmReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Return</button>
+        <textarea id="pmjsonTextarea" rows="10" cols="50" style="margin: 0 auto;">loading...</textarea>
+        <button onclick="fetchAndLoadJSON('pmjsonTextarea','/db/pools.json')" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Reload JSON</button>
+        <button onclick="submitJSON('pmjsonTextarea','/db/pools.json)" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Submit JSON</button>
+    </div>
+
+    <div id="networkmanagement" style="display:none; text-align: center;">
+        <h1 style="margin: 0 auto;">Edit and Submit Wifi Details</h1>
+
+        <button id="nwReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Return</button>
+        <textarea id="nwjsonTextarea" rows="10" cols="50" style="margin: 0 auto;">loading...</textarea>
+        <button onclick="fetchAndLoadJSON('nwjsonTextarea','/db/wifi.json')" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Reload</button>
+        <button onclick="submitJSON('nwjsonTextarea','/db/wifi.json')" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Submit</button>
+    </div>
+
     <div id="mainmenu" style="display:block">
         <nav>
             <ul>
                 <li><button onclick="showdiv('paceset')" class="button-prep2 pure-button">Pace Set</button></li>
                 <li><button onclick="showdiv('sprintset')" class="button-prep2 pure-button">Sprint Set</button></li>
                 <li><button onclick="showdiv('poolmanagement')" class="button-prep2 pure-button">Pool Management</button></li>
+                <li><button onclick="showdiv('networkmanagement')" class="button-prep2 pure-button">Network Management</button></li>
                 <li><button onclick="showdiv('ledcontrols')" class="button-prep2 pure-button">Led Controls</button></li>
                 <li><button onclick="callApi('/HardReset')" class="button-prep2 pure-button">Hard Reset</button></li>
                 <!-- Add more buttons as needed -->
@@ -123,15 +142,6 @@ header("Expires: 0"); // Proxies
     <button  id="ssPrepButton" onclick="PrepSprint()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Prep Set</button>
     <button  id="ssStartButton" onclick="StartSprint()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Start Set</button>
 
-</div>
-
-<div id="poolmanagement" style="display:none; text-align: center;">
-    <h1 style="margin: 0 auto;">Edit and Submit JSON</h1>
-
-    <button id="pmReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Return</button>
-    <textarea id="jsonTextarea" rows="10" cols="50" style="margin: 0 auto;"></textarea>
-    <button onclick="fetchAndLoadJSON()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Reload JSON</button>
-    <button onclick="submitJSON()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Submit JSON</button>
 </div>
 
 <div id="ledcontrols" style="display:none">
