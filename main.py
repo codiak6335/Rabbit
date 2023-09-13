@@ -199,11 +199,11 @@ def prep(request):
     print(request.args)
     print(request.args['audio'])
     print(request.args['duration'][0])
-    ss.set_bottom_times()
-    print(float(string_to_seconds(request.args['duration'])))
-    print(float(string_to_seconds(request.args['interval'])))
-    ss.set_bottom_times(float(string_to_seconds(request.args['duration'])), int(request.args['distance']), float(string_to_seconds(request.args['interval'])),
-                        int(request.args['repetitions']), 25, request.args['direction'] == "Near")
+    #ss.set_bottom_times()
+    print(f'duration = {(string_to_seconds(request.args['duration']))}')
+    print(f'interval = {(string_to_seconds(request.args['interval']))}')
+    ss.set_bottom_times(int(string_to_seconds(request.args['duration'])), int(request.args['distance']), int(string_to_seconds(request.args['interval'])),
+                        int(request.args['repetitions']), 25, request.args['direction'] == "Near", request.args['pool'])
     ss.use_audio(request.args['audio'])
     return '{"msg":"Prepped"}'
 

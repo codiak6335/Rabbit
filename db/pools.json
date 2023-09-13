@@ -1,28 +1,51 @@
 {
-	"defaultSchool": "Bellevue East / West",
+	"defaultSchool": "Bellevue East",
 	"pools": {
-		"Bellevue East / West": {
+		"Bellevue East": {
+			"PixelCount": 883,
+			"Length": "25 yards",
+			"Segments": [{
+					"FirstPixel": 164,
+					"Distance": 0
+				},
+				{
+					"FirstPixel": 247,
+					"Distance": 11.37
+				},
+				{
+					"FirstPixel": 365,
+					"Distance": 22.19
+				},
+				{
+					"FirstPixel": 516,
+					"Distance": 34.88
+				}
+			]
+		}, 
+		"Bellevue West": {
 			"PixelCount": 882,
+			"Length": "25 yards",
 			"Segments": [{
 					"FirstPixel": 168,
-					"Distance": 6.28
+					"Distance": 0
 				},
 				{
 					"FirstPixel": 248,
-					"Distance": 15.45
+					"Distance": 6.28
 				},
 				{
 					"FirstPixel": 329,
-					"Distance": 34.88
+					"Distance": 15.45
 				},
 				{
 					"FirstPixel": 518,
-					"Distance": 40.12
+					"Distance": 34.88
 				}
 			]
 		},
 		"Brownelle Talbot": {
 			"PixelCount": 882,
+			"Length": "25 yards",
 			"Segments": [{
 					"FirstPixel": 168,
 					"Distance": 6.28

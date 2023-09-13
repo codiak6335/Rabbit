@@ -18,23 +18,6 @@ from ledcursor import CCursor
 timescale = 1000
 
 
-class BottomContourMaps:
-    def __init__(self):
-        self.bcms = []
-        self.load()
-
-    def load(self):
-        with open('BottomContourMaps.json', 'rt') as f:
-            # noinspection PyTypeChecker
-            self.bcms = json.load(f)
-        return self.bcms
-
-    @staticmethod
-    def save():
-        with open('BottomContourMaps.json', 'wt') as f:
-            r = json.dumps(get_bottom_map())
-            f.write(r)
-
 class poolDefinitions:
     def _init__(self):
         self.bcms = []
@@ -69,6 +52,9 @@ class PoolData:
         pool = self.get_pool_data(pool_name)
 
         PixelCount = pool['PixelCount']
+        poolLength = 164.042  # default is 50 meters (in feet)
+        if pool['Length'] == '25 yards':
+            poolLength = 75.0
         Segments = pool['Segments']
 
         MaxPixels = 0 
@@ -95,28 +81,33 @@ class PoolData:
 
         finalBcm = [row[:] for row in bcm]
 
-        for i in range(len(bcm)-1, -1, -1):
+        for i in range(len(finalBcm)-1, -1, -1):
             finalBcm[i][2] = MaxPixels
             MaxPixels = MaxPixels - finalBcm[i][4]
             finalBcm[i][1] = MaxPixels
             MaxPixels = MaxPixels - 1
             del finalBcm[i][4]
+                        
+        total = 0;
+        for i in range(len(finalBcm)):
+            print(i)
+            if i == len(finalBcm) -1:
+                finalBcm[i][3] = poolLength - total
+            else:
+                finalBcm[i][3] = finalBcm[i+1][3] - finalBcm[i][3]
+                total += finalBcm[i][3]
+
+            print(f'{finalBcm[i][3]}')
+            
 
         print(bcm)
         print(finalBcm)
         return finalBcm
-
-def get_bottom_map():
+ 
+def get_bottom_map(pool):
     pools = PoolData('./db/pools.json')
-    bcm = pools.get_corrected_bcm('Bellevue East / West')
-    print(bcm)
+    bcm = pools.get_corrected_bcm(pool)
     return bcm
-
-
-#    bsm = BottomSectionMap = [[5.5, 0, 10, 75]]
-#    if not debug:
-#        bsm = BottomSectionMap = [[5.5, 174, 251, 6], [12, 252, 326, 15], [12, 327, 526, 21], [5.5, 527, 890, 33]]
-#    return bsm
 
 
 class CLedStrand:
@@ -278,15 +269,15 @@ class SwimSet:
 
         self.LedStrand.meter15s = [self.qc(p1), self.qc(p2)]
 
-        print(f'{self.LedStrand.meter15s}')
+        print(f'15 meter leds = {self.LedStrand.meter15s}')
 
-    def set_bottom_times(self, duration=120, distance=200, interval=180, repetitions=20, length=25, direction=True):
+    def set_bottom_times(self, duration=120, distance=200, interval=180, repetitions=20, length=25, direction=True, pool = 'Bellevue East'):
         self.ltime = 0
         if direction:
             print("Near")
         else:
             print("Far")
-        self.BottomSectionMap = get_bottom_map()
+        self.BottomSectionMap = get_bottom_map(pool)
         self.Direction = direction
         self.duration = duration
         self.distance = distance
@@ -349,6 +340,7 @@ class SwimSet:
         #        print(f'l buffer : {self.TimeHacks[False]}")
 
         self.calc15_meter_locations()
+        print(f'timehacks : {self.TimeHacks}')
 
     def stop_set(self):
         self.RunningMode = False
