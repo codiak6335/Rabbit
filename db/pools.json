@@ -1,5 +1,5 @@
 {
-	"defaultSchool": "Bellevue East",
+	"defaultPool": "Bellevue East",
 	"pools": {
 		"Bellevue East": {
 			"PixelCount": 883,

@@ -33,7 +33,11 @@ class PoolData:
     def __init__(self, filename):
         self.filename = filename
         self.data = self.load_data()
+        print(self.data)
+        self.defaultPool = self.data['defaultPool']
+        print(self.defaultPool)
 
+    
     def load_data(self):
         try:
             with open(self.filename, 'r') as file:
@@ -104,8 +108,10 @@ class PoolData:
         print(finalBcm)
         return finalBcm
  
-def get_bottom_map(pool):
+def get_bottom_map(pool = None):
     pools = PoolData('./db/pools.json')
+    if pool == None:
+        pool = pools.defaultPool
     bcm = pools.get_corrected_bcm(pool)
     return bcm
 

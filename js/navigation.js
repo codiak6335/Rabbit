@@ -225,7 +225,7 @@ function FetchPools() {
                   option.text = schoolName;
                   console.log("Appending:")
                   console.log(schoolName)
-                  if (schoolName === data.defaultSchool) {
+                  if (schoolName === data.defaultPool) {
                         option.selected = true;
                         console.log("selected")
                     }
