@@ -6,6 +6,9 @@ let returnDepth = 0;
 let currentDivId = document.getElementById('mainmenu')
 const previousContent = [];
 
+let pmjsontextarealoaded = 0;
+let nwjsonTextarealoaded =  0;
+
 function showdiv(newdiv) {
     console.log(newdiv)
     currentDivId.style.display = 'none';
@@ -237,39 +240,6 @@ function FetchPools() {
             console.error('Error fetching JSON:', error);
         });
     }
-
-function FetchPoolsOld() {
-    poolsSelect.innerHTML = ''
-    fetch('/db/pools.json', {method: 'GET'})
-         .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Check if 'data' and 'data.options' are defined
-            if (data && data.options) {
-                // Access the options array from the JSON data
-                const optionsArray = data.options;
-
-                // Populate globalSelect with options from the JSON data
-                optionsArray.forEach(optionText => {
-                    const optionElement = document.createElement('option');
-                    optionElement.text = optionText;
-                    optionElement.value = optionText; // You can set a different value if needed
-                    poolsSelect.appendChild(optionElement);
-                });
-                console.log(poolsSelect)
-            } else {
-                console.error('JSON data or options array is undefined');
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching JSON:', error);
-        });
-    }
-    
     function addValuesToPoolsSelect(poolelement) {
         console.log('addValuesToPoolsSelect() called');
         // Get the "pools" select element by its ID
@@ -288,20 +258,42 @@ function FetchPoolsOld() {
 
     // Call the function to add values to the "pools" select element
 function fetchAndLoadJSON(textareaId, jsonFilename) {
+    console.log("Fetch in",textareaId, pmjsontextarealoaded, nwjsonTextarealoaded)
     fetch(jsonFilename, { method: 'GET' })
         .then(response => response.json())
         .then(data => {
             const jsonTextarea = document.getElementById(textareaId);
             console.log(jsonTextarea)
             jsonTextarea.value = JSON.stringify(data, null, 2);
+            if (textareaId === 'pmjsonTextarea') {
+                pmjsontextarealoaded = 1
+            } else 
+                if (textareaId === 'nwjsonTextarea') {
+                    nwjsonTextarealoaded = 1
+                }
+                console.log("Fetch out",textareaId, pmjsontextarealoaded, nwjsonTextarealoaded)
         })
         .catch(error => console.error('Error fetching JSON:', error));
 }
  
     // Function to submit the edited JSON
-    function submitJSON(textarea,filename) {
+    function submitJSON(textareaId,filename) {
+        console.log("get in", textareaId, pmjsontextarealoaded, nwjsonTextarealoaded)
+        if (textareaId === 'pmjsontextarea') {
+            if (pmjsontextarealoaded === 0) {
+                alert("Data has not been loaded yet.")
+                return
+            }
+        } else 
+            if (textareaId === 'nwjsonTextarealoaded') {
+                if (nwjsonTextarealoaded === 0) {
+                    alert("Data has not been loaded yet.")
+                    return
+                }
+            }  
+       
         console.log('submitting')
-        const editedJSON = document.getElementById(textarea).value;
+        const editedJSON = document.getElementById(textareaId).value;
 
         // Parse the edited JSON
         try {
@@ -322,12 +314,12 @@ function fetchAndLoadJSON(textareaId, jsonFilename) {
             .then(data => {
                 console.log('Server response:', data);
             })
-            .catch(error => console.error('Error submitting JSON:', error));
+            .catch(error => alert('Error submitting JSON: ' + error));
+           
             
         } catch (error) {
             console.error('Error parsing JSON:', error);
         }
-        FetchPools()
     }
 
     // Function to submit the edited JSON
