@@ -18,6 +18,15 @@ from ledcursor import CCursor
 timescale = 1000
 
 
+def print_gc_stats():
+    collect_result = gc.collect()
+    if hasattr(gc, "mem_alloc") and hasattr(gc, "mem_free"):
+        print(gc.mem_alloc(), gc.mem_free(), collect_result)
+        print(gc.mem_alloc(), gc.mem_free())
+    else:
+        print(f"gc.collect() -> {collect_result}")
+
+
 class poolDefinitions:
     def _init__(self):
         self.bcms = []
@@ -54,6 +63,8 @@ class PoolData:
 
     def get_corrected_bcm(self, pool_name):
         pool = self.get_pool_data(pool_name)
+        if pool is None:
+            raise ValueError(f"Pool '{pool_name}' was not found in pool definitions")
 
         PixelCount = pool['PixelCount']
         poolLength = 164.042  # default is 50 meters (in feet)
@@ -69,14 +80,37 @@ class PoolData:
 
         bcm = []
         print(PixelCount)
-        for segment in Segments:
+        for i, segment in enumerate(Segments):
+            first_pixel = (
+                segment.get('FirstPixel')
+                if isinstance(segment, dict)
+                else None
+            )
+            if first_pixel is None and isinstance(segment, dict):
+                first_pixel = segment.get('firstPixel', segment.get('first_pixel'))
+
+            distance = (
+                segment.get('Distance')
+                if isinstance(segment, dict)
+                else None
+            )
+            if distance is None and isinstance(segment, dict):
+                distance = segment.get('distance')
+
+            if first_pixel is None or distance is None:
+                print(f"Skipping invalid segment at index {i} for pool '{pool_name}': {segment}")
+                continue
+
             s = [0,0,0,0,0]
             s[0] = 0
-            s[1] = segment['FirstPixel']
+            s[1] = int(first_pixel)
             s[2] = PixelCount
-            s[3] = segment['Distance']
+            s[3] = float(distance)
             print(s)
             bcm.append(s)
+
+        if len(bcm) == 0:
+            raise ValueError(f"Pool '{pool_name}' has no valid segments with FirstPixel/Distance")
 
         for i in range(len(bcm) - 1):
             bcm[i][2] = bcm[i + 1][1] - 1
@@ -236,7 +270,19 @@ class SwimSet:
                                     self.STRANDLENGTH - 1)
         # numpix -1 is actually the highest pixel index, not the number of pixels
 
-        self.Cursor = CCursor(self.LedStrand, (255, 255, 255), (255, 0, 0), self.dimLevel)
+        self.Cursors = [
+            CCursor(self.LedStrand, (255, 255, 255), (255, 0, 0), self.dimLevel),
+            CCursor(self.LedStrand, (255, 255, 255), (0, 255, 0), self.dimLevel),
+            CCursor(self.LedStrand, (255, 255, 255), (0, 0, 255), self.dimLevel),
+        ]
+        self.Cursor = self.Cursors[0]
+        self.cursor_count = 1
+        self.pace_cursor_durations = [120, 120, 120]
+        self.sprint_cursor_durations = [120, 120, 120]
+        self.pace_cursor_count = 1
+        self.sprint_cursor_count = 1
+        self.pace_stagger = True
+        self._time_profile_cache = {}
 
         self.ms_at_pixel_down = [0] * self.numpix
         self.ms_at_pixel_back = [0] * self.numpix
@@ -248,6 +294,131 @@ class SwimSet:
 
         self.AudioAlert = CAudioAlert()
         self.meter15s = None
+
+    @staticmethod
+    def _normalize_repetitions(repetitions):
+        if repetitions is None:
+            return 0
+        try:
+            value = int(repetitions)
+        except (TypeError, ValueError):
+            return 0
+        return value if value >= 0 else 0
+
+    @staticmethod
+    def _normalize_duration_list(values, default_value):
+        result = [default_value, default_value, default_value]
+        if values is None:
+            return result
+        for i in range(3):
+            if i >= len(values):
+                break
+            try:
+                v = int(values[i])
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
+                result[i] = v
+        return result
+
+    @staticmethod
+    def _duration_count(values):
+        if values is None:
+            return 1
+        count = 0
+        for i in range(3):
+            if i >= len(values):
+                break
+            try:
+                v = int(values[i])
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
+                count += 1
+        return count if count > 0 else 1
+
+    def configure_cursors(self, pace_durations=None, sprint_durations=None):
+        # Additional cursors are enabled only when additional durations are provided.
+        self.pace_cursor_count = self._duration_count(pace_durations)
+        self.sprint_cursor_count = self._duration_count(sprint_durations)
+        self.cursor_count = max(self.pace_cursor_count, self.sprint_cursor_count)
+        self.pace_cursor_durations = self._normalize_duration_list(pace_durations, int(self.duration or 120))
+        self.sprint_cursor_durations = self._normalize_duration_list(sprint_durations, int(self.duration or 120))
+        self._time_profile_cache = {}
+        print(
+            f'Configured cursors: pace_count={self.pace_cursor_count} '
+            f'sprint_count={self.sprint_cursor_count} pace={self.pace_cursor_durations} '
+            f'sprint={self.sprint_cursor_durations}'
+        )
+
+    def set_pace_stagger(self, pace_stagger):
+        self.pace_stagger = bool(pace_stagger)
+        print(f'Configured pace stagger: {self.pace_stagger}')
+
+    def is_prepared(self):
+        required = (
+            self.BottomSectionMap,
+            self.duration,
+            self.distance,
+            self.length,
+            self.interval,
+            self.ms_total_time,
+            self.ms_per_length,
+            self.ms_per_pixel,
+        )
+        if any(value is None for value in required):
+            return False
+        return self.length > 0 and self.distance > 0 and self.interval >= 0
+
+    def sleep_interruptible(self, seconds):
+        end_time = time.ticks_ms() + int(seconds * 1000)
+        while self.RunningMode and time.ticks_diff(end_time, time.ticks_ms()) > 0:
+            remaining_ms = time.ticks_diff(end_time, time.ticks_ms())
+            step_ms = 100 if remaining_ms > 100 else remaining_ms
+            time.sleep_ms(step_ms)
+
+    @staticmethod
+    def _format_countdown(seconds):
+        if seconds < 60:
+            return f'{seconds}s'
+        minutes = seconds // 60
+        secs = seconds % 60
+        return f'{minutes}:{secs:02d}'
+
+    def _rep_status_text(self, rep_number, completed=False):
+        if self.repetitions == 0:
+            return f'Done rep: {rep_number}' if completed else f'Rep: {rep_number}'
+        if completed:
+            return f'Done: {rep_number}/{self.repetitions}'
+        return f'Rep: {rep_number}/{self.repetitions}'
+
+    @staticmethod
+    def _format_elapsed(seconds):
+        minutes = int(seconds // 60)
+        remaining_seconds = int(seconds % 60)
+        return f'{minutes}:{remaining_seconds:02d}'
+
+    def run_rest_countdown(self, rest_seconds, reps_completed):
+        rest_ms = int(rest_seconds * timescale)
+        end_time = time.ticks_ms() + rest_ms
+        last_shown = -1
+
+        while self.RunningMode:
+            remaining_ms = time.ticks_diff(end_time, time.ticks_ms())
+            if remaining_ms <= 0:
+                break
+
+            remaining_seconds = (remaining_ms + 999) // 1000
+            if remaining_seconds != last_shown:
+                self.display.fill(self.display.black)
+                self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
+                self.display.text(self._rep_status_text(reps_completed, completed=True), 1, 12, self.display.white)
+                self.display.text(f'Next start: {self._format_countdown(remaining_seconds)}', 1, 22, self.display.white)
+                self.display.show()
+                last_shown = remaining_seconds
+
+            step_ms = 100 if remaining_ms > 100 else remaining_ms
+            time.sleep_ms(step_ms)
 
     def use_audio(self, flag):
         self.AudioAlert.use_audio(flag)
@@ -289,7 +460,7 @@ class SwimSet:
         self.distance = distance
         self.length = length
         self.interval = interval
-        self.repetitions = repetitions
+        self.repetitions = self._normalize_repetitions(repetitions)
         print(f'dur-dis-lenth {self.duration}, {self.distance}, {self.length}')
         self.seconds_per_length = (self.duration / (self.distance / self.length))
         print(f'secs per length - numpix {self.seconds_per_length}, {self.numpix}')
@@ -298,6 +469,7 @@ class SwimSet:
         self.ms_per_length = self.seconds_per_length * timescale
         self.ms_per_pixel = int(self.seconds_per_pixel * timescale)
         self.ms_total_time = self.duration * timescale
+        self.configure_cursors(self.pace_cursor_durations, self.sprint_cursor_durations)
 
         duration = self.ms_per_length
         pool_length = self.length
@@ -316,11 +488,11 @@ class SwimSet:
             percentage_of_length = float(float(section[FEET]) / pool_length_in_feet)
             section_duration = duration * percentage_of_length
 
-            section_led_count = section[LEDEND] - section[LEDSTART]
+            section_led_count = section[LEDEND] - section[LEDSTART] + 1
             led_ms_step = section_duration / section_led_count
             # print ("percentage_of_length, section_duration, section_led_count, led_ms_step : ",percentage_of_length,
             # section_duration, section_led_count, led_ms_step)
-            for loop in range(section[LEDSTART], section[LEDEND]):
+            for loop in range(section[LEDSTART], section[LEDEND] + 1):
                 du += led_ms_step
                 self.ms_buffer[led] = int(du)
                 du = du % 1
@@ -331,22 +503,101 @@ class SwimSet:
         print(f'ms buffer : {self.ms_buffer}')
 
         self.TimeHacks = {True: [0] * 1000}
-        for x in range(self.lowestLed, self.highestLed):
+        for x in range(self.lowestLed, self.highestLed + 1):
             self.TimeHacks[True][x] = self.ms_buffer[x] + self.TimeHacks[True][x - 1]
 
         self.TimeHacks[False] = [0] * 1000
-        for x in range(self.highestLed, self.lowestLed, -1):
+        for x in range(self.highestLed, self.lowestLed - 1, -1):
             self.TimeHacks[False][x] = self.ms_buffer[x] + self.TimeHacks[False][x + 1]
 
-        print(gc.mem_alloc(), gc.mem_free(), gc.collect())
-        print(gc.mem_alloc(), gc.mem_free())
-
-        print(gc.mem_alloc(), gc.mem_free(), gc.collect())
-        print(gc.mem_alloc(), gc.mem_free())
+        print_gc_stats()
+        print_gc_stats()
         #        print(f'l buffer : {self.TimeHacks[False]}")
 
         self.calc15_meter_locations()
         print(f'timehacks : {self.TimeHacks}')
+
+    def _create_time_profile(self, duration_seconds):
+        duration_seconds = int(duration_seconds)
+        if duration_seconds <= 0:
+            duration_seconds = int(self.duration or 1)
+
+        cache_key = duration_seconds
+        if cache_key in self._time_profile_cache:
+            return self._time_profile_cache[cache_key]
+
+        base_duration = int(self.duration or duration_seconds or 1)
+        if base_duration <= 0:
+            base_duration = 1
+        scale = float(duration_seconds) / float(base_duration)
+
+        ms_per_length = int(self.ms_per_length * scale)
+        if ms_per_length < 1:
+            ms_per_length = 1
+
+        hacks_true = [0] * 1000
+        hacks_false = [0] * 1000
+        for x in range(self.lowestLed, self.highestLed + 1):
+            hacks_true[x] = int(self.TimeHacks[True][x] * scale)
+        for x in range(self.lowestLed, self.highestLed + 1):
+            hacks_false[x] = int(self.TimeHacks[False][x] * scale)
+
+        profile = {
+            'ms_per_length': ms_per_length,
+            'hacks_true': hacks_true,
+            'hacks_false': hacks_false,
+        }
+        self._time_profile_cache[cache_key] = profile
+        return profile
+
+    def _get_pixel_for_elapsed(self, elapsed_ms, start_direction, profile):
+        if elapsed_ms <= 0:
+            return self.lowestLed if start_direction else self.highestLed
+
+        ms_per_length = profile['ms_per_length']
+        length_index = int(elapsed_ms // ms_per_length)
+        time_in_length = int(elapsed_ms - (length_index * ms_per_length))
+        direction = start_direction if (length_index % 2 == 0) else (not start_direction)
+
+        if direction:
+            for pixel in range(self.lowestLed, self.highestLed + 1):
+                if time_in_length <= profile['hacks_true'][pixel]:
+                    return pixel
+            return self.highestLed
+        for pixel in range(self.highestLed, self.lowestLed - 1, -1):
+            if time_in_length <= profile['hacks_false'][pixel]:
+                return pixel
+        return self.lowestLed
+
+    def _render_cursors(self, pixels):
+        self.LedStrand.Strand.fill((0, 0, 0))
+        self.LedStrand.draw15s()
+        for i, pixel in enumerate(pixels):
+            if pixel is None:
+                continue
+            self.Cursors[i].draw(pixel, True, clear_before=False, write_after=False)
+        self.LedStrand.Strand.write()
+
+    def _build_rep_plan(self, mode):
+        durations = self.pace_cursor_durations if mode == 'pace' else self.sprint_cursor_durations
+        active_count = self.pace_cursor_count if mode == 'pace' else self.sprint_cursor_count
+        plan = []
+        rep_total_ms = 0
+        for i in range(active_count):
+            duration_ms = int(durations[i] * timescale)
+            delay_ms = 0
+            if mode == 'pace' and self.pace_stagger and i > 0:
+                delay_ms = i * 5 * timescale
+            plan.append({
+                'index': i,
+                'duration_ms': duration_ms,
+                'delay_ms': delay_ms,
+                'profile': self._create_time_profile(durations[i]),
+            })
+            candidate_total = delay_ms + duration_ms
+            if candidate_total > rep_total_ms:
+                rep_total_ms = candidate_total
+        return plan, rep_total_ms
 
     def stop_set(self):
         self.RunningMode = False
@@ -399,53 +650,64 @@ class SwimSet:
         #        print(f'out : {current_pace} {self.TimeHacks[True][self.currentPixel]} {self.currentPixel}")
         return return_value
 
-    def rep(self, threeBeeps=True):
-        self.PipOn = True
-
-        self.maxtimeindex = self.highestLed
-        self.currentPixel = self.lowestLed
-        if not self.Direction:
-            self.timeIndex = self.maxtimeindex
-
+    def rep(self, mode='pace', threeBeeps=True, rep_number=None):
         print(f'Direction Change : {self.Direction}')
-        print(f'Rep starting: {self.currentPixel}')
         self.AudioAlert.beeps(threeBeeps)
 
-        start_time = time.ticks_ms()  # Pycharm needs a *1000
-        self.staticStartTime = start_time
+        start_time = time.ticks_ms()
+        plan, rep_total_ms = self._build_rep_plan(mode)
+        last_shown_second = -1
 
-        self.laptimeadjustment = 0
-        self.lapcount = 0
-        self.drawcount = 0
-
-        self.startTimeOfThisLength = time.ticks_ms()
         while self.RunningMode:
-            if time.ticks_diff(time.ticks_ms(), self.staticStartTime) >= self.ms_total_time:
+            elapsed = time.ticks_diff(time.ticks_ms(), start_time)
+            if elapsed >= rep_total_ms:
                 break
-            self.next_pixel()
-            if self.currentPixel != self.lastPixel:
-                self.lastPixel = self.currentPixel
-                self.drawcount += 1
-                self.Cursor.draw(self.currentPixel, self.PipOn)
+
+            if mode == 'pace' and rep_number is not None:
+                elapsed_seconds = int(elapsed // timescale)
+                if elapsed_seconds != last_shown_second:
+                    self.display.fill(self.display.black)
+                    self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
+                    self.display.text(self._rep_status_text(rep_number), 1, 12, self.display.white)
+                    self.display.text(f'Time: {self._format_elapsed(elapsed_seconds)}', 1, 22, self.display.white)
+                    self.display.show()
+                    last_shown_second = elapsed_seconds
+
+            pixels = [None, None, None]
+            for entry in plan:
+                idx = entry['index']
+                cursor_elapsed = elapsed - entry['delay_ms']
+                if cursor_elapsed < 0:
+                    continue
+                if cursor_elapsed > entry['duration_ms']:
+                    cursor_elapsed = entry['duration_ms']
+                pixels[idx] = self._get_pixel_for_elapsed(cursor_elapsed, self.Direction, entry['profile'])
+
+            self._render_cursors(pixels)
+            time.sleep_ms(10)
 
         self.lastRepEnd = time.ticks_ms()
         self.LedStrand.clear_strand()
 
     def loop(self):
+        if not self.is_prepared():
+            raise RuntimeError('Swim set is not prepared. Call /prep before /start.')
+
         self.Stopped = False
         self.RunningMode = True
         self.lastPixel = -1
         reps = 0
         while self.RunningMode and (self.repetitions == 0 or reps < self.repetitions):
+            current_rep = reps + 1
             self.display.fill(self.display.black)
             self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
             # self.OLED.text(netstr[0],1,12,self.OLED.white)
-            self.display.text(f'Status: {reps} of {self.repetitions}', 1, 22, self.display.white)
+            self.display.text(self._rep_status_text(current_rep), 1, 22, self.display.white)
             self.display.show()
 
             start_time = time.ticks_ms()
 
-            self.rep()
+            self.rep(mode='pace', rep_number=current_rep)
 
             if self.RunningMode:
                 reps += 1
@@ -461,11 +723,11 @@ class SwimSet:
                     # should validate this on input and not allow it to happen
                     print('No rest for you!')
                 else:
-                    if reps < self.repetitions:
+                    if self.repetitions == 0 or reps < self.repetitions:
                         print(f'Resting Interval : {rest_interval}')
-                        time.sleep(rest_interval)
+                        self.run_rest_countdown(rest_interval, reps)
 
-        self.Stopped = False
+        self.Stopped = True
         self.display.fill(self.display.black)
         self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
         # self.OLED.text(netstr[0],1,12,self.OLED.white)
@@ -489,7 +751,7 @@ class SwimSet:
             self.display.show()
 
             start_time = time.ticks_ms()
-            self.rep(threeBeeps=False)
+            self.rep(mode='sprint', threeBeeps=False)
             self.Direction = direction
             if self.RunningMode:
                 reps += 1
@@ -500,7 +762,7 @@ class SwimSet:
 
                 print(f'{reps} repetitions completed.')
 
-        self.Stopped = False
+        self.Stopped = True
         self.display.fill(self.display.black)
         self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
         # self.OLED.text(netstr[0],1,12,self.OLED.white)

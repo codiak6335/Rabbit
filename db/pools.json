@@ -7,19 +7,30 @@
       "Segments": [
         {
           "FirstPixel": 164,
-          "Distance": 0
+          "Distance": 0,
+          "depth": 5,
+          "detail": "baseline"
         },
         {
           "FirstPixel": 287,
-          "Distance": 11.37
+          "Distance": 11.37,
+          "detail": "down",
+          "depth": 12
         },
         {
           "FirstPixel": 365,
-          "Distance": 19.95
+          "Distance": 19.95,
+          "detail": "flat",
+          "depth": 12
         },
         {
           "FirstPixel": 516,
-          "Distance": 34.6
+          "Distance": 34.6,
+          "detail": "up",
+          "depth": 5
+        },
+        {
+          "depth": 3
         }
       ]
     },

@@ -33,7 +33,7 @@ def do_access_point():
     ap.config(essid=ssid, password=password)
     ap.active(True)
 
-    while not ap.active:
+    while not ap.active():
         pass
 
     print("Access point active")
@@ -119,19 +119,30 @@ def ignite_led_location(request, path):
 
 # noinspection PyUnusedLocal
 @app.route('/prototypes/<path:path>')
-def index(request, path):
+def prototypes(request, path):
     return send_file('prototypes/' + path)
 
 
 
 # noinspection PyUnusedLocal
 @app.route('/')
-def index(request):
+def home(request):
     return send_file('index.html')
 
 @app.route('/favicon.ico')
-def index(request):
+def favicon(request):
     return send_file('favicon.ico')
+
+
+def get_required_arg(request, key):
+    value = request.args.get(key)
+    if value is None:
+        raise ValueError(f"Missing required parameter: {key}")
+    if isinstance(value, str):
+        value = value.strip()
+    if value == "":
+        raise ValueError(f"Empty required parameter: {key}")
+    return value
 
 
 def string_to_seconds(input_str):
@@ -184,6 +195,32 @@ def string_to_seconds(input_str):
         print(f"Error: {e}")
         return None
 
+
+def parse_duration_list_csv(csv_value):
+    if csv_value is None:
+        return None
+    raw = csv_value.strip()
+    if raw == "":
+        return None
+    values = []
+    for token in raw.split(','):
+        seconds = string_to_seconds(token.strip())
+        if seconds is None:
+            raise ValueError(f"Invalid duration token: {token}")
+        values.append(int(seconds))
+    return values
+
+
+def parse_bool_arg(value, default=False):
+    if value is None:
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in ("1", "true", "yes", "on"):
+        return True
+    if normalized in ("0", "false", "no", "off"):
+        return False
+    raise ValueError(f"Invalid boolean value: {value}")
+
 # Example usage:
 #input_string = "01:23:45.67"
 #seconds_float = string_to_seconds(input_string)
@@ -195,16 +232,40 @@ def string_to_seconds(input_str):
 @app.route('/prep')
 def prep(request):
     print("Prepping ")
+    local_stop()
     # local_stop()
     print(request.args)
-    print(request.args['audio'])
-    print(request.args['duration'][0])
-    #ss.set_bottom_times()
-    print(f'duration = {(string_to_seconds(request.args['duration']))}')
-    print(f'interval = {(string_to_seconds(request.args['interval']))}')
-    ss.set_bottom_times(int(string_to_seconds(request.args['duration'])), int(request.args['distance']), int(string_to_seconds(request.args['interval'])),
-                        int(request.args['repetitions']), 25, request.args['direction'] == "Near", request.args['pool'])
-    ss.use_audio(request.args['audio'])
+    try:
+        duration = string_to_seconds(get_required_arg(request, 'duration'))
+        interval = string_to_seconds(get_required_arg(request, 'interval'))
+        if duration is None or interval is None:
+            return '{"msg":"Invalid duration/interval format"}', 400
+
+        distance = int(get_required_arg(request, 'distance'))
+        repetitions = int(get_required_arg(request, 'repetitions'))
+        direction = get_required_arg(request, 'direction') == "Near"
+        pool = get_required_arg(request, 'pool')
+        audio = get_required_arg(request, 'audio')
+        pace_durations = parse_duration_list_csv(request.args.get('paceDurations'))
+        sprint_durations = parse_duration_list_csv(request.args.get('sprintDurations'))
+        pace_stagger = parse_bool_arg(request.args.get('stagger'), default=True)
+    except ValueError as e:
+        return '{"msg":"' + str(e) + '"}', 400
+
+    print(f'duration = {duration}')
+    print(f'interval = {interval}')
+    ss.set_bottom_times(
+        int(duration),
+        distance,
+        int(interval),
+        repetitions,
+        25,
+        direction,
+        pool
+    )
+    ss.configure_cursors(pace_durations, sprint_durations)
+    ss.set_pace_stagger(pace_stagger)
+    ss.use_audio(audio)
     return '{"msg":"Prepped"}'
 
 
@@ -219,8 +280,11 @@ def db(request, path):
         return send_file("/db/"+path)
     elif request.method == 'POST':
         print(request.body)
+        body = request.body
+        if isinstance(body, bytes):
+            body = body.decode('utf-8')
         with open('/db/'+path, "w") as json_file:
-            json_file.write(request.body)
+            json_file.write(body)
             
         return '{"msg":"Saved"}'
     
@@ -237,7 +301,7 @@ def css(request, path):
 
 # noinspection PyUnusedLocal
 @app.route('/js/<path:path>')
-def css(request, path):
+def js(request, path):
     print("js ", path)
     if '..' in path:
     # directory traversal is not allowed
@@ -287,29 +351,48 @@ def light_segment(request):
 # noinspection PyUnusedLocal,SpellCheckingInspection
 @app.route('/ignitemarkers')
 def ignite_markers(request):
-    ss.LedStrand.ignite_markers(ss.debug)
+    ss.LedStrand.ignite_markers()
+    return '{"msg":"MarkersLit"}'
 
 
 def second_thread():
     ss.LedStrand.clear_strand()
-    ss.loop()
+    try:
+        ss.loop()
+    except Exception as e:
+        print(f"Error in swim loop: {e}")
+        ss.stop_set()
+        ss.Stopped = True
 
 
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/start')
 def start(request):
-    # local_stop()
+    if not ss.Stopped or ss.RunningMode:
+        return '{"msg":"Already running"}', 409
+    if not ss.is_prepared():
+        return '{"msg":"Not prepared. Call /prep before /start"}', 400
+    ss.Stopped = False
     _thread.start_new_thread(second_thread, ())
     return '{"msg":"Started"}'
 
 def sprint_second_thread():
     ss.LedStrand.clear_strand()
-    ss.sprintloop()
+    try:
+        ss.sprintloop()
+    except Exception as e:
+        print(f"Error in sprint loop: {e}")
+        ss.stop_set()
+        ss.Stopped = True
 
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/startsprint')
 def startsprint(request):
-    # local_stop()
+    if not ss.Stopped or ss.RunningMode:
+        return '{"msg":"Already running"}', 409
+    if not ss.is_prepared():
+        return '{"msg":"Not prepared. Call /prep before /startsprint"}', 400
+    ss.Stopped = False
     _thread.start_new_thread(sprint_second_thread, ())
     return '{"msg":"Started"}'
 
@@ -319,7 +402,7 @@ def local_stop():
         print("stopping")
         ss.stop_set()
         i = 0
-        while not ss.Stopped and i < 20:
+        while not ss.Stopped and i < 50:
             time.sleep(0.1)  # give the thread a chance to exit cleanly
             i += 1
         print("Stopped")

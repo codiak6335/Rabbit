@@ -9,6 +9,24 @@ const previousContent = [];
 let pmjsontextarealoaded = 0;
 let nwjsonTextarealoaded =  0;
 
+function splitDurationCsv(rawValue) {
+    if (!rawValue) {
+        return [];
+    }
+    return rawValue
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+}
+
+function firstDurationToken(rawValue) {
+    const tokens = splitDurationCsv(rawValue);
+    if (tokens.length === 0) {
+        return rawValue.trim();
+    }
+    return tokens[0];
+}
+
 function showdiv(newdiv) {
     console.log(newdiv)
     currentDivId.style.display = 'none';
@@ -47,13 +65,23 @@ function PrepSprint() {
     const poolsValue = document.getElementById('sspools').value;
     const directionValue = document.getElementById('ssdirection').value;
     const audioValue = document.getElementById('ssaudio').value;
-    const durationValue = document.getElementById('ssduration').value;
+    const durationCsvValue = document.getElementById('ssduration').value;
+    const durationValue = firstDurationToken(durationCsvValue);
     const distanceValue = 25;
     const repetitionsValue = 0;
-    const intervalValue = durationValue+5;
+    const intervalValue = durationValue;
 
-        // Concatenate the values into a single string
-    const concatenatedValues = `/prep?pool=${poolsValue}&direction=${directionValue}&audio=${audioValue}&duration=${durationValue}&distance=${distanceValue}&repetitions=${repetitionsValue}&interval=${intervalValue}`;
+    const params = new URLSearchParams({
+        pool: poolsValue,
+        direction: directionValue,
+        audio: audioValue,
+        duration: durationValue,
+        distance: distanceValue,
+        repetitions: repetitionsValue,
+        interval: intervalValue,
+        sprintDurations: durationCsvValue
+    });
+    const concatenatedValues = `/prep?${params.toString()}`;
     
     console.log(concatenatedValues)
 
@@ -70,13 +98,24 @@ function PrepIt() {
     const poolsValue = document.getElementById('pools').value;
     const directionValue = document.getElementById('direction').value;
     const audioValue = document.getElementById('audio').value;
-    const durationValue = document.getElementById('duration').value;
+    const durationCsvValue = document.getElementById('duration').value;
+    const durationValue = firstDurationToken(durationCsvValue);
     const distanceValue = document.getElementById('distance').value;
     const repetitionsValue = document.getElementById('repetitions').value;
     const intervalValue = document.getElementById('interval').value;
-
-        // Concatenate the values into a single string
-    const concatenatedValues = `/prep?pool=${poolsValue}&direction=${directionValue}&audio=${audioValue}&duration=${durationValue}&distance=${distanceValue}&repetitions=${repetitionsValue}&interval=${intervalValue}`;
+    const staggerValue = document.getElementById('stagger').checked ? 'true' : 'false';
+    const params = new URLSearchParams({
+        pool: poolsValue,
+        direction: directionValue,
+        audio: audioValue,
+        duration: durationValue,
+        distance: distanceValue,
+        repetitions: repetitionsValue,
+        interval: intervalValue,
+        stagger: staggerValue,
+        paceDurations: durationCsvValue
+    });
+    const concatenatedValues = `/prep?${params.toString()}`;
     
 
     console.log(concatenatedValues)
@@ -197,9 +236,16 @@ window.addEventListener('popstate', function () {
 
 function validateTimeFormat(input) {
     const regex = /^(?:(?:([01]?[0-9]|2[0-3]):)?([0-5]?[0-9]):)?([0-5]?[0-9])\.(\d{1,3})$/;
-    if (!regex.test(input.value)) {
+    const values = splitDurationCsv(input.value);
+    if (values.length === 0) {
         alert("Invalid time format. Please use [HH:]mm:ss.sss format.");
-        //input.value = ""; // Clear the input field
+        return;
+    }
+    for (const value of values) {
+        if (!regex.test(value)) {
+            alert("Invalid time format. Please use [HH:]mm:ss.sss format.");
+            return;
+        }
     }
 }
 
@@ -347,5 +393,3 @@ function fetchAndLoadJSON(textareaId, jsonFilename) {
       siblingobj.value = newValue; // Update the element's value
       ledlocationchange(siblingobj)
 }
-
-
