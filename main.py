@@ -21,6 +21,7 @@ app = Microdot()
 display = displays.get_display()
 ss = SwimSet(display, False)
 run_lock = _thread.allocate_lock()
+ADMIN_TOKEN = os.getenv('RABBIT_ADMIN_TOKEN', '')
 
 
 def json_response(payload, status=200):
@@ -29,6 +30,22 @@ def json_response(payload, status=200):
 
 def error_response(message, status=400):
     return json_response({'error': message}, status)
+
+
+def get_header(request, name):
+    value = request.headers.get(name)
+    if value is None:
+        value = request.headers.get(name.lower())
+    return value
+
+
+def require_admin(request):
+    if not ADMIN_TOKEN:
+        return None
+    supplied_token = request.args.get('token') or get_header(request, 'X-Rabbit-Token')
+    if supplied_token != ADMIN_TOKEN:
+        return error_response('Forbidden', 403)
+    return None
 
 
 def safe_project_file(base_path, request_path):
@@ -75,6 +92,80 @@ def read_int_file(path, default_value):
             return int(value_file.readline().strip())
     except (OSError, ValueError):
         return default_value
+
+
+def validate_pools_config(data):
+    if not isinstance(data, dict):
+        raise ValueError('pools config must be a JSON object')
+    pools = data.get('pools')
+    if not isinstance(pools, dict) or not pools:
+        raise ValueError('pools config must include a non-empty pools object')
+    default_pool = data.get('defaultPool')
+    if default_pool not in pools:
+        raise ValueError('defaultPool must reference an existing pool')
+
+    for pool_name, pool in pools.items():
+        if not isinstance(pool, dict):
+            raise ValueError(f'pool must be an object: {pool_name}')
+        pixel_count = int(pool.get('PixelCount', 0))
+        if pixel_count <= 0:
+            raise ValueError(f'PixelCount must be greater than zero: {pool_name}')
+        if 'Length' not in pool:
+            raise ValueError(f'Length is required: {pool_name}')
+        segments = pool.get('Segments')
+        if not isinstance(segments, list) or not segments:
+            raise ValueError(f'Segments must be a non-empty list: {pool_name}')
+
+        previous_distance = None
+        for index, segment in enumerate(segments):
+            if not isinstance(segment, dict):
+                raise ValueError(f'Segment must be an object: {pool_name} #{index}')
+            first_pixel = int(segment.get('FirstPixel', -1))
+            distance = float(segment.get('Distance'))
+            if first_pixel < 0:
+                raise ValueError(f'FirstPixel must be at least zero: {pool_name} #{index}')
+            if previous_distance is not None and distance < previous_distance:
+                raise ValueError(f'Segment distances must not decrease: {pool_name} #{index}')
+            previous_distance = distance
+
+
+def validate_wifi_config(data):
+    if not isinstance(data, dict):
+        raise ValueError('wifi config must be a JSON object')
+    wifis = data.get('wifis')
+    if not isinstance(wifis, list):
+        raise ValueError('wifi config must include a wifis list')
+    for index, wifi in enumerate(wifis):
+        if not isinstance(wifi, dict):
+            raise ValueError(f'wifi entry must be an object: #{index}')
+        if not isinstance(wifi.get('ssid'), str) or wifi.get('ssid') == '':
+            raise ValueError(f'wifi ssid is required: #{index}')
+        if not isinstance(wifi.get('password'), str):
+            raise ValueError(f'wifi password must be a string: #{index}')
+        int(wifi.get('active', 0))
+
+
+def validate_db_json(path, data):
+    normalized = path.lower()
+    if normalized == 'pools.json':
+        validate_pools_config(data)
+    elif normalized == 'wifi.json':
+        validate_wifi_config(data)
+
+
+def write_json_atomic(file_path, data):
+    temp_path = file_path + '.tmp'
+    with open(temp_path, 'w') as json_file:
+        json.dump(data, json_file, indent=2)
+        json_file.write('\n')
+    try:
+        os.replace(temp_path, file_path)
+    except AttributeError:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+        os.rename(temp_path, file_path)
 
 
 LEGACY_DEPTH_ANCHORS = {
@@ -361,17 +452,33 @@ def debug(request):
 
 @app.route('/saveaslastled/<path:path>')
 def save_as_last_led(request, path):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
+    try:
+        led = int(path)
+    except ValueError:
+        return error_response('Invalid LED number', 400)
+    if led < 0:
+        return error_response('LED number must be at least zero', 400)
     with open(project_path('/db/lastled.dat'), "w") as file1:
-        file1.write(f"{int(path)}")
-    return '{"msg":"saved"}'
+        file1.write(f"{led}")
+    return json_response({'msg': 'saved'})
 
 @app.route('/IgniteLedLoc/<path:path>')
 def ignite_led_location(request, path):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
+    try:
+        led = int(path)
+    except ValueError:
+        return error_response('Invalid LED number', 400)
     print("path : ", path)
     debug(request)
-    ss.LedStrand.ignite_led_location(int(path))
+    ss.LedStrand.ignite_led_location(led)
 
-    return '{"msg":"Lit"}'
+    return json_response({'msg': 'Lit'})
 
 
 # noinspection PyUnusedLocal
@@ -498,6 +605,9 @@ def get_variation_fraction(request_args):
 # noinspection SpellCheckingInspection
 @app.route('/prep')
 def prep(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     print("Prepping ")
     if ss.RunningMode:
         return error_response('Cannot prep while a set is running.', 409)
@@ -551,10 +661,17 @@ def db(request, path):
     if request.method == 'GET':
         return send_file(file_path)
     elif request.method == 'POST':
+        admin_error = require_admin(request)
+        if admin_error:
+            return admin_error
         print(request.body)
         body = request.body.decode() if isinstance(request.body, bytes) else request.body
-        with open(file_path, "w") as json_file:
-            json_file.write(body)
+        try:
+            data = json.loads(body)
+            validate_db_json(path, data)
+        except (TypeError, ValueError) as exc:
+            return error_response(str(exc), 400)
+        write_json_atomic(file_path, data)
             
         return json_response({'msg': 'Saved'})
     
@@ -593,35 +710,51 @@ def static(request, path):
 # noinspection PyUnusedLocal
 @app.route('/stop')
 def stop(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     local_stop()
-    return '{"msg":"Stopped"}'
+    return json_response({'msg': 'Stopped'})
 
 
 # noinspection PyUnusedLocal
 @app.route('/ClearStrand')
 def clear_strand(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     ss.LedStrand.clear_strand()
-    return '{"msg":"Cleared"}'
+    return json_response({'msg': 'Cleared'})
 
 
 # noinspection PyUnusedLocal
 @app.route('/LightStrand')
 def light_strand(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     ss.LedStrand.light_strand()
-    return '{"msg":"StrandLit"}'
+    return json_response({'msg': 'StrandLit'})
 
 
 # noinspection PyUnusedLocal
 @app.route('/LightSegment')
 def light_segment(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     ss.LedStrand.light_segment()
-    return '{"msg":"SegmentLit"}'
+    return json_response({'msg': 'SegmentLit'})
 
 
 # noinspection PyUnusedLocal,SpellCheckingInspection
 @app.route('/ignitemarkers')
 def ignite_markers(request):
-    ss.LedStrand.ignite_markers(ss.debug)
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
+    ss.LedStrand.ignite_markers()
+    return json_response({'msg': 'MarkersLit'})
 
 
 def second_thread():
@@ -644,6 +777,9 @@ def start_set_thread(target):
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/start')
 def start(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     try:
         if not start_set_thread(second_thread):
             return error_response('A set is already running.', 409)
@@ -658,6 +794,9 @@ def sprint_second_thread():
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/startsprint')
 def startsprint(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     try:
         if not start_set_thread(sprint_second_thread):
             return error_response('A set is already running.', 409)
@@ -683,25 +822,22 @@ def local_stop():
 # noinspection PyUnusedLocal,SpellCheckingInspection
 @app.route('/loadpools')
 def load_pools(request):
-    pools_filename = project_path("/data/Pools.json")
-    f = open(pools_filename, 'r')
-    settings_string = f.read()
-    f.close()
-    n = settings_string.replace("\'", "\"")
-    pools = ujson.loads(n)
-    ps = str(pools).replace("\'", "\"")
-    print(ps)
-    return ps 
+    with open(project_path('/db/pools.json'), 'r') as pools_file:
+        pools = json.load(pools_file)
+    return json_response(pools)
 
 
 # noinspection PyUnusedLocal,SpellCheckingInspection
 @app.route('/HardReset')
 def hardreset(request):
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
     try:
         machine.reset()
     except SystemExit as exc:
-        return '{"msg":"reset-emulated"}'
-    return "{msg:reset}"
+        return json_response({'msg': 'reset-emulated'})
+    return json_response({'msg': 'reset'})
 
 # OLED = OLED_2inch23()
 display.fill(display.black)

@@ -13,6 +13,25 @@ function buildPrepQuery(params) {
     return `/prep?${new URLSearchParams(params).toString()}`;
 }
 
+function getRabbitToken() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token') || localStorage.getItem('rabbitToken') || '';
+    if (token) {
+        localStorage.setItem('rabbitToken', token);
+    }
+    return token;
+}
+
+function rabbitUrl(path) {
+    const token = getRabbitToken();
+    if (!token) {
+        return path;
+    }
+    const url = new URL(path, window.location.origin);
+    url.searchParams.set('token', token);
+    return `${url.pathname}${url.search}`;
+}
+
 function timeToSeconds(value) {
     const parts = value.split(':');
     let hours = 0;
@@ -77,7 +96,7 @@ function goBack() {
 
 
 
-function PrepSprint() {
+async function PrepSprint() {
     const poolsValue = document.getElementById('sspools').value;
     const directionValue = document.getElementById('ssdirection').value;
     const audioValue = document.getElementById('ssaudio').value;
@@ -102,16 +121,19 @@ function PrepSprint() {
     
     console.log(concatenatedValues)
 
-    callApi(concatenatedValues)
-
-    document.getElementById('ssPrepButton').style.display = 'none';
-    document.getElementById('ssStartButton').style.display = 'block';
-    document.getElementById('ssCancelButton').style.display = 'block';
-    document.getElementById('ssReturnButton').style.display = 'none';
-    toggleReadOnly('sstableofinputs')
+    try {
+        await callApi(concatenatedValues);
+        document.getElementById('ssPrepButton').style.display = 'none';
+        document.getElementById('ssStartButton').style.display = 'block';
+        document.getElementById('ssCancelButton').style.display = 'block';
+        document.getElementById('ssReturnButton').style.display = 'none';
+        toggleReadOnly('sstableofinputs');
+    } catch (error) {
+        alert(error.message);
+    }
 }
 
-function PrepIt() {
+async function PrepIt() {
     const poolsValue = document.getElementById('pools').value;
     const directionValue = document.getElementById('direction').value;
     const audioValue = document.getElementById('audio').value;
@@ -137,13 +159,16 @@ function PrepIt() {
 
     console.log(concatenatedValues)
 
-    callApi(concatenatedValues)
-
-    document.getElementById('PrepButton').style.display = 'none';
-    document.getElementById('StartButton').style.display = 'block';
-    document.getElementById('CancelButton').style.display = 'block';
-     document.getElementById('ReturnButton').style.display = 'none';
-    toggleReadOnly('tableofinputs')
+    try {
+        await callApi(concatenatedValues);
+        document.getElementById('PrepButton').style.display = 'none';
+        document.getElementById('StartButton').style.display = 'block';
+        document.getElementById('CancelButton').style.display = 'block';
+        document.getElementById('ReturnButton').style.display = 'none';
+        toggleReadOnly('tableofinputs');
+    } catch (error) {
+        alert(error.message);
+    }
 }
 
 
@@ -163,25 +188,33 @@ function toggleReadOnly(parm) {
 }
 
 
-function callApi(callme) {
-    fetch(callme, {
-            method: 'GET', // or 'PUT'
-        })
-            .then((response) => response.json())
-            .then((data) => {
-                console.log('Success:', data);
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-            });
+async function callApi(callme) {
+    const response = await fetch(rabbitUrl(callme), {
+        method: 'GET',
+    });
+    let data = {};
+    try {
+        data = await response.json();
+    } catch (error) {
+        data = {};
+    }
+    if (!response.ok) {
+        throw new Error(data.error || `Request failed: ${response.status}`);
+    }
+    console.log('Success:', data);
+    return data;
 }
 
-function StartIt() {
-    callApi('/start')
-    document.getElementById('StartButton').style.display = 'none';
-    document.getElementById('ReturnButton').style.display = 'none';
-    document.getElementById('CancelButton').style.display = 'none';
-    document.getElementById('StopButton').style.display = 'block';
+async function StartIt() {
+    try {
+        await callApi('/start');
+        document.getElementById('StartButton').style.display = 'none';
+        document.getElementById('ReturnButton').style.display = 'none';
+        document.getElementById('CancelButton').style.display = 'none';
+        document.getElementById('StopButton').style.display = 'block';
+    } catch (error) {
+        alert(error.message);
+    }
 
 }
 
@@ -194,21 +227,29 @@ function CancelIt() {
 }
 
 
-function StopIt() {
-    callApi('/stop')
-    document.getElementById('CancelButton').style.display = 'block';
-    document.getElementById('StartButton').style.display = 'block';
-    document.getElementById('StopButton').style.display = 'none';
+async function StopIt() {
+    try {
+        await callApi('/stop');
+        document.getElementById('CancelButton').style.display = 'block';
+        document.getElementById('StartButton').style.display = 'block';
+        document.getElementById('StopButton').style.display = 'none';
+    } catch (error) {
+        alert(error.message);
+    }
 
 }
 
 
-function StartSprint() {
-    callApi('/startsprint')
-    document.getElementById('ssStartButton').style.display = 'none';
-    document.getElementById('ssReturnButton').style.display = 'none';
-    document.getElementById('ssCancelButton').style.display = 'none';
-    document.getElementById('ssStopButton').style.display = 'block';
+async function StartSprint() {
+    try {
+        await callApi('/startsprint');
+        document.getElementById('ssStartButton').style.display = 'none';
+        document.getElementById('ssReturnButton').style.display = 'none';
+        document.getElementById('ssCancelButton').style.display = 'none';
+        document.getElementById('ssStopButton').style.display = 'block';
+    } catch (error) {
+        alert(error.message);
+    }
 
 }
 
@@ -221,11 +262,15 @@ function CancelSprint() {
 
 }
 
-function StopSprint() {
-    callApi('/stop')
-    document.getElementById('ssCancelButton').style.display = 'block';
-    document.getElementById('ssStartButton').style.display = 'block';
-    document.getElementById('ssStopButton').style.display = 'none';
+async function StopSprint() {
+    try {
+        await callApi('/stop');
+        document.getElementById('ssCancelButton').style.display = 'block';
+        document.getElementById('ssStartButton').style.display = 'block';
+        document.getElementById('ssStopButton').style.display = 'none';
+    } catch (error) {
+        alert(error.message);
+    }
 
 }
 
@@ -335,13 +380,13 @@ function fetchAndLoadJSON(textareaId, jsonFilename) {
     // Function to submit the edited JSON
     function submitJSON(textareaId,filename) {
         console.log("get in", textareaId, pmjsontextarealoaded, nwjsonTextarealoaded)
-        if (textareaId === 'pmjsontextarea') {
+        if (textareaId === 'pmjsonTextarea') {
             if (pmjsontextarealoaded === 0) {
                 alert("Data has not been loaded yet.")
                 return
             }
         } else 
-            if (textareaId === 'nwjsonTextarealoaded') {
+            if (textareaId === 'nwjsonTextarea') {
                 if (nwjsonTextarealoaded === 0) {
                     alert("Data has not been loaded yet.")
                     return
@@ -353,20 +398,25 @@ function fetchAndLoadJSON(textareaId, jsonFilename) {
 
         // Parse the edited JSON
         try {
-            const parsedJSON = editedJSON;
+            const parsedJSON = JSON.parse(editedJSON);
             // You can send the parsedJSON to your server for processing here
             console.log('Edited JSON:', parsedJSON);
 
             // Example: Send the edited JSON to a server using fetch
             
-            fetch(filename, {
+            fetch(rabbitUrl(filename), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: parsedJSON,
+                body: JSON.stringify(parsedJSON),
             })
-            .then(response => response.json())
+            .then(response => response.json().then(data => {
+                if (!response.ok) {
+                    throw new Error(data.error || `Request failed: ${response.status}`);
+                }
+                return data;
+            }))
             .then(data => {
                 console.log('Server response:', data);
             })
@@ -379,12 +429,16 @@ function fetchAndLoadJSON(textareaId, jsonFilename) {
     }
 
     // Function to submit the edited JSON
-    function saveaslastled() {
+    async function saveaslastled() {
         siblingobj = document.getElementById('ledlocationtext');
-        callApi("/saveaslastled/" + siblingobj.value)
+        try {
+            await callApi("/saveaslastled/" + siblingobj.value);
+        } catch (error) {
+            alert(error.message);
+        }
     }
 
-    function ledlocationchange(obj) {
+    async function ledlocationchange(obj) {
         console.log(obj.type)
         var siblingobj;
         if (obj.type == "range") {
@@ -393,7 +447,11 @@ function fetchAndLoadJSON(textareaId, jsonFilename) {
             siblingobj = document.getElementById('ledlocationslide');
         }
         siblingobj.value = obj.value
-        callApi("/IgniteLedLoc/" + obj.value)
+        try {
+            await callApi("/IgniteLedLoc/" + obj.value);
+        } catch (error) {
+            alert(error.message);
+        }
     }
 
     function adjustLedLocation(increment) {
@@ -403,4 +461,3 @@ function fetchAndLoadJSON(textareaId, jsonFilename) {
       siblingobj.value = newValue; // Update the element's value
       ledlocationchange(siblingobj)
 }
-

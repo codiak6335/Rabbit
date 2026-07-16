@@ -24,3 +24,13 @@ If you need a different bind address or port:
 ```bash
 RABBIT_EMULATOR=1 RABBIT_HOST=0.0.0.0 RABBIT_PORT=5000 python3 main.py
 ```
+
+## Admin token
+
+Set `RABBIT_ADMIN_TOKEN` to require a token for control and config-write routes:
+
+```bash
+RABBIT_ADMIN_TOKEN=change-me python3 main.py
+```
+
+Open the UI with `?token=change-me` once, or send `X-Rabbit-Token: change-me` from API clients.
