@@ -1,9 +1,13 @@
 {
   "wifis": [
+{ "active" : 1,
+"ssid": "FTLAquatics",
+"password" : "FTLAquatics-Password1!"
+},
     {
-      "active": 1,
-      "ssid": "ssid-1",
-      "password": "password"
+      "active": 0,
+      "ssid": "beaver",
+      "password": "joanieandcharlielovealex"
     },
     {
       "active": 0,

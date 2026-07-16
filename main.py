@@ -1,5 +1,6 @@
 import _thread
 import json
+import math
 import os
 import time
 import sys
@@ -19,6 +20,258 @@ ujson = json
 app = Microdot()
 display = displays.get_display()
 ss = SwimSet(display, False)
+run_lock = _thread.allocate_lock()
+
+
+def json_response(payload, status=200):
+    return json.dumps(payload), status, {'Content-Type': 'application/json'}
+
+
+def error_response(message, status=400):
+    return json_response({'error': message}, status)
+
+
+def safe_project_file(base_path, request_path):
+    normalized = os.path.normpath('/' + request_path).lstrip('/')
+    full_path = project_path(os.path.join(base_path, normalized))
+    base_full_path = project_path(base_path)
+    if not os.path.abspath(full_path).startswith(os.path.abspath(base_full_path) + os.sep):
+        return None
+    return full_path
+
+
+def required_arg(args, name):
+    value = args.get(name)
+    if value is None or value == '':
+        raise ValueError(f'Missing required parameter: {name}')
+    return value
+
+
+def int_arg(args, name, minimum=None):
+    try:
+        value = int(required_arg(args, name))
+    except ValueError:
+        raise ValueError(f'Invalid integer parameter: {name}')
+    if minimum is not None and value < minimum:
+        raise ValueError(f'{name} must be at least {minimum}')
+    return value
+
+
+def get_pool_names():
+    with open(project_path('/db/pools.json'), 'r') as pools_file:
+        pools_data = json.load(pools_file)
+    return pools_data.get('pools', {}).keys()
+
+
+def pool_length_to_feet(length_label):
+    if str(length_label).strip().lower() == '25 yards':
+        return 75.0
+    return 164.042
+
+
+def read_int_file(path, default_value):
+    try:
+        with open(path, 'r') as value_file:
+            return int(value_file.readline().strip())
+    except (OSError, ValueError):
+        return default_value
+
+
+LEGACY_DEPTH_ANCHORS = {
+    'Bellevue East': [
+        {'led': 162, 'depthFeet': 5.5},
+        {'led': 285, 'depthFeet': 12.0},
+        {'led': 366, 'depthFeet': 12.0},
+        {'led': 517, 'depthFeet': 5.5},
+        {'led': 883, 'depthFeet': 4.0},
+    ],
+    'Bellevue West': [
+        {'led': 174, 'depthFeet': 5.5},
+        {'led': 252, 'depthFeet': 12.0},
+        {'led': 326, 'depthFeet': 12.0},
+        {'led': 527, 'depthFeet': 5.5},
+        {'led': 890, 'depthFeet': 5.5},
+    ],
+}
+
+
+def interpolate_depth_for_led(led, depth_anchors):
+    if not depth_anchors:
+        return None
+    if led <= depth_anchors[0]['led']:
+        return depth_anchors[0]['depthFeet']
+    for index in range(len(depth_anchors) - 1):
+        start = depth_anchors[index]
+        end = depth_anchors[index + 1]
+        if led <= end['led']:
+            led_delta = end['led'] - start['led']
+            t = 0.0 if led_delta == 0 else (led - start['led']) / led_delta
+            return start['depthFeet'] + ((end['depthFeet'] - start['depthFeet']) * t)
+    return depth_anchors[-1]['depthFeet']
+
+
+def interpolate_distance_for_led(led, distance_anchors):
+    if led <= distance_anchors[0]['led']:
+        return distance_anchors[0]['distanceFeet']
+    for index in range(len(distance_anchors) - 1):
+        start = distance_anchors[index]
+        end = distance_anchors[index + 1]
+        if led <= end['led']:
+            led_delta = end['led'] - start['led']
+            t = 0.0 if led_delta == 0 else (led - start['led']) / led_delta
+            return start['distanceFeet'] + ((end['distanceFeet'] - start['distanceFeet']) * t)
+    return distance_anchors[-1]['distanceFeet']
+
+
+def load_pool_profile(pool_name=None):
+    with open(project_path('/db/pools.json'), 'r') as pools_file:
+        pools_data = json.load(pools_file)
+
+    selected_pool_name = pool_name or pools_data.get('defaultPool')
+    pools = pools_data.get('pools', {})
+    pool = pools.get(selected_pool_name)
+    if pool is None:
+        raise ValueError(f'Unknown pool: {selected_pool_name}')
+
+    spacing_mm = float(pool.get('LedSpacingMm', pools_data.get('LedSpacingMm', 30)))
+    spacing_feet = spacing_mm / 304.8
+    length_feet = pool_length_to_feet(pool.get('Length', ''))
+    last_led = read_int_file(project_path('/db/lastled.dat'), int(pool.get('PixelCount', 0)))
+
+    anchors = []
+    for segment in pool.get('Segments', []):
+        anchor = {
+            'led': int(segment.get('FirstPixel', 0)),
+            'distanceFeet': float(segment.get('Distance', 0.0)),
+        }
+        if 'DepthFeet' in segment:
+            anchor['depthFeet'] = float(segment['DepthFeet'])
+        elif 'Depth' in segment:
+            anchor['depthFeet'] = float(segment['Depth'])
+        anchors.append(anchor)
+
+    anchors.sort(key=lambda item: item['led'])
+    if not anchors:
+        raise ValueError(f'Pool has no segment anchors: {selected_pool_name}')
+    markers_by_distance = {0.0: {'distanceFeet': 0.0, 'label': '0 ft'}}
+    for anchor in anchors:
+        markers_by_distance[anchor['distanceFeet']] = {
+            'distanceFeet': anchor['distanceFeet'],
+            'label': f"{anchor['distanceFeet']:.1f} ft",
+        }
+    markers_by_distance[length_feet] = {'distanceFeet': length_feet, 'label': f"{length_feet:.0f} ft"}
+
+    depth_anchors = [
+        {'led': int(anchor['led']), 'depthFeet': float(anchor['depthFeet'])}
+        for anchor in anchors
+        if 'depthFeet' in anchor
+    ]
+    if not depth_anchors:
+        depth_anchors = LEGACY_DEPTH_ANCHORS.get(selected_pool_name, [])
+    depth_anchors = sorted(depth_anchors, key=lambda item: item['led'])
+
+    if anchors[0]['distanceFeet'] > 0:
+        anchors.insert(0, {'led': anchors[0]['led'], 'distanceFeet': 0.0})
+
+    if last_led > anchors[-1]['led'] or length_feet > anchors[-1]['distanceFeet']:
+        final_anchor = {
+            'led': max(last_led, anchors[-1]['led']),
+            'distanceFeet': max(length_feet, anchors[-1]['distanceFeet']),
+        }
+        if 'depthFeet' in anchors[-1]:
+            final_anchor['depthFeet'] = anchors[-1]['depthFeet']
+        anchors.append(final_anchor)
+
+    distance_anchors = [anchor.copy() for anchor in anchors]
+    anchors_by_led = {anchor['led']: anchor.copy() for anchor in anchors}
+    for depth_anchor in depth_anchors:
+        led = depth_anchor['led']
+        if led not in anchors_by_led:
+            anchors_by_led[led] = {
+                'led': led,
+                'distanceFeet': interpolate_distance_for_led(led, distance_anchors),
+            }
+        anchors_by_led[led]['depthFeet'] = depth_anchor['depthFeet']
+    anchors = sorted(anchors_by_led.values(), key=lambda item: item['led'])
+
+    for anchor in anchors:
+        interpolated_depth = interpolate_depth_for_led(anchor['led'], depth_anchors)
+        if interpolated_depth is not None:
+            anchor['approximateDepthFeet'] = interpolated_depth
+
+    sections = []
+    depth_feet = anchors[0].get('approximateDepthFeet', anchors[0].get('depthFeet', 0.0))
+    anchors[0]['calculatedDepthFeet'] = depth_feet
+    max_depth = depth_feet
+    min_depth = depth_feet
+
+    for index in range(len(anchors) - 1):
+        start = anchors[index]
+        end = anchors[index + 1]
+        led_delta = end['led'] - start['led']
+        travel_delta = end['distanceFeet'] - start['distanceFeet']
+        strip_length_feet = abs(led_delta) * spacing_feet
+        possible = strip_length_feet + 0.001 >= abs(travel_delta)
+        vertical_magnitude = math.sqrt(max(0.0, strip_length_feet ** 2 - travel_delta ** 2))
+
+        if 'approximateDepthFeet' in start and 'approximateDepthFeet' in end:
+            depth_delta = end['approximateDepthFeet'] - start['approximateDepthFeet']
+            depth_feet = end['approximateDepthFeet']
+            mode = 'depth-profile'
+        else:
+            midpoint = start['distanceFeet'] + (travel_delta / 2.0)
+            sign = 1.0 if midpoint <= (length_feet / 2.0) else -1.0
+            depth_delta = vertical_magnitude * sign
+            depth_feet += depth_delta
+            mode = 'geometry-with-pool-half-direction'
+
+        end['calculatedDepthFeet'] = depth_feet
+        max_depth = max(max_depth, depth_feet)
+        min_depth = min(min_depth, depth_feet)
+        sections.append({
+            'startLed': start['led'],
+            'endLed': end['led'],
+            'startDistanceFeet': start['distanceFeet'],
+            'endDistanceFeet': end['distanceFeet'],
+            'stripLengthFeet': strip_length_feet,
+            'travelLengthFeet': abs(travel_delta),
+            'depthChangeFeet': depth_delta,
+            'possibleWithLedSpacing': possible,
+            'mode': mode,
+        })
+
+    led_positions = []
+    max_led = max(last_led, anchors[-1]['led'])
+    anchor_index = 0
+    for led in range(max_led + 1):
+        while anchor_index < len(anchors) - 2 and led > anchors[anchor_index + 1]['led']:
+            anchor_index += 1
+        start = anchors[anchor_index]
+        end = anchors[min(anchor_index + 1, len(anchors) - 1)]
+        led_span = end['led'] - start['led']
+        t = 0.0 if led_span == 0 else (led - start['led']) / led_span
+        t = max(0.0, min(1.0, t))
+        distance = start['distanceFeet'] + ((end['distanceFeet'] - start['distanceFeet']) * t)
+        start_depth = start.get('calculatedDepthFeet', 0.0)
+        end_depth = end.get('calculatedDepthFeet', start_depth)
+        depth = start_depth + ((end_depth - start_depth) * t)
+        led_positions.append({
+            'led': led,
+            'distanceFeet': distance,
+            'depthFeet': depth,
+        })
+
+    return {
+        'poolName': selected_pool_name,
+        'lengthFeet': length_feet,
+        'ledSpacingMm': spacing_mm,
+        'lastLed': last_led,
+        'depthRangeFeet': max_depth - min_depth,
+        'anchors': anchors,
+        'sections': sections,
+        'markers': [markers_by_distance[key] for key in sorted(markers_by_distance)],
+        'ledPositions': led_positions,
+    }
 
 
 def do_access_point():
@@ -145,7 +398,37 @@ def emulator(request):
 
 @app.route('/api/emulator/state')
 def emulator_state(request):
-    return json.dumps(EMULATOR_STATE.snapshot())
+    snapshot = EMULATOR_STATE.snapshot()
+    flat_progress = {
+        'active': False,
+        'fraction': 0.0,
+        'direction': 'near-to-far',
+    }
+    if ss.RunningMode and ss.startTimeOfThisLength is not None and ss.current_length_ms:
+        elapsed_ms = time.ticks_diff(time.ticks_ms(), ss.startTimeOfThisLength)
+        fraction = elapsed_ms / ss.current_length_ms
+        if fraction < 0:
+            fraction = 0.0
+        elif fraction > 1:
+            fraction = 1.0
+        if not ss.Direction:
+            fraction = 1.0 - fraction
+        flat_progress = {
+            'active': True,
+            'fraction': fraction,
+            'direction': 'near-to-far' if ss.Direction else 'far-to-near',
+        }
+    snapshot['flatProgress'] = flat_progress
+    return json.dumps(snapshot)
+
+
+@app.route('/api/emulator/pool-profile')
+def emulator_pool_profile(request):
+    try:
+        profile = load_pool_profile(request.args.get('pool'))
+    except ValueError as exc:
+        return error_response(str(exc), 404)
+    return json_response(profile)
 
 
 def string_to_seconds(input_str):
@@ -216,41 +499,64 @@ def get_variation_fraction(request_args):
 @app.route('/prep')
 def prep(request):
     print("Prepping ")
-    # local_stop()
-    print(request.args)
-    print(request.args['audio'])
-    print(request.args['duration'][0])
-    duration_seconds = string_to_seconds(request.args['duration'])
-    interval_seconds = string_to_seconds(request.args['interval'])
-    strategy = request.args.get('strategy', 'even')
-    variation = get_variation_fraction(request.args)
-    #ss.set_bottom_times()
-    print(f'duration = {duration_seconds}')
-    print(f'interval = {interval_seconds}')
-    print(f'strategy = {strategy}, variation = {variation}')
-    ss.set_bottom_times(int(duration_seconds), int(request.args['distance']), int(interval_seconds),
-                        int(request.args['repetitions']), 25, request.args['direction'] == "Near",
-                        request.args['pool'], strategy, variation)
-    ss.use_audio(request.args['audio'])
-    return '{"msg":"Prepped"}'
+    if ss.RunningMode:
+        return error_response('Cannot prep while a set is running.', 409)
+
+    try:
+        pool = required_arg(request.args, 'pool')
+        if pool not in get_pool_names():
+            raise ValueError(f'Unknown pool: {pool}')
+
+        direction = required_arg(request.args, 'direction')
+        if direction not in ('Near', 'Far'):
+            raise ValueError('direction must be Near or Far')
+
+        audio = required_arg(request.args, 'audio')
+        if audio not in ('Yes', 'No'):
+            raise ValueError('audio must be Yes or No')
+
+        duration_seconds = string_to_seconds(required_arg(request.args, 'duration'))
+        interval_seconds = string_to_seconds(required_arg(request.args, 'interval'))
+        if duration_seconds is None or duration_seconds <= 0:
+            raise ValueError('duration must be greater than zero')
+        if interval_seconds is None or interval_seconds < duration_seconds:
+            raise ValueError('interval must be greater than or equal to duration')
+
+        distance = int_arg(request.args, 'distance', 1)
+        repetitions = int_arg(request.args, 'repetitions', 0)
+        strategy = request.args.get('strategy', 'even')
+        if strategy not in ('even', 'negative_split', 'surge'):
+            raise ValueError('strategy must be even, negative_split, or surge')
+        variation = get_variation_fraction(request.args)
+
+        print(f'duration = {duration_seconds}')
+        print(f'interval = {interval_seconds}')
+        print(f'strategy = {strategy}, variation = {variation}')
+        ss.set_bottom_times(int(duration_seconds), distance, int(interval_seconds),
+                            repetitions, 25, direction == "Near", pool, strategy, variation)
+        ss.use_audio(audio)
+    except (KeyError, ValueError, TypeError) as exc:
+        return error_response(str(exc), 400)
+
+    return json_response({'msg': 'Prepped'})
 
 
 # noinspection PyUnusedLocal
 @app.route('/db/<path:path>', methods=['GET', 'POST'])
 def db(request, path):
     print("db ", path)
-    if '..' in path:
-    # directory traversal is not allowed
+    file_path = safe_project_file('db', path)
+    if file_path is None:
         return 'Not found', 404
     if request.method == 'GET':
-        return send_file(project_path("/db/" + path))
+        return send_file(file_path)
     elif request.method == 'POST':
         print(request.body)
         body = request.body.decode() if isinstance(request.body, bytes) else request.body
-        with open(project_path('/db/' + path), "w") as json_file:
+        with open(file_path, "w") as json_file:
             json_file.write(body)
             
-        return '{"msg":"Saved"}'
+        return json_response({'msg': 'Saved'})
     
     
 
@@ -258,19 +564,19 @@ def db(request, path):
 @app.route('/css/<path:path>')
 def css(request, path):
     print("css ", path)
-    if '..' in path:
-    # directory traversal is not allowed
+    file_path = safe_project_file('css', path)
+    if file_path is None:
         return 'Not found', 404
-    return send_file(project_path("/css/" + path))
+    return send_file(file_path)
 
 # noinspection PyUnusedLocal
 @app.route('/js/<path:path>')
 def css(request, path):
     print("js ", path)
-    if '..' in path:
-    # directory traversal is not allowed
+    file_path = safe_project_file('js', path)
+    if file_path is None:
         return 'Not found', 404
-    return send_file(project_path("/js/" + path))
+    return send_file(file_path)
 
 
 
@@ -278,10 +584,10 @@ def css(request, path):
 @app.route('/static/<path:path>')
 def static(request, path):
     print("static ", path)
-    if '..' in path:
-    # directory traversal is not allowed
+    file_path = safe_project_file('static', path)
+    if file_path is None:
         return 'Not found', 404
-    return send_file(project_path("/static/" + path))
+    return send_file(file_path)
 
 
 # noinspection PyUnusedLocal
@@ -323,12 +629,27 @@ def second_thread():
     ss.loop()
 
 
+def start_set_thread(target):
+    with run_lock:
+        if ss.RunningMode:
+            return False
+        if not ss.length_plan_ms:
+            raise ValueError('Prep a set before starting.')
+        ss.Stopped = False
+        ss.RunningMode = True
+        _thread.start_new_thread(target, ())
+    return True
+
+
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/start')
 def start(request):
-    # local_stop()
-    _thread.start_new_thread(second_thread, ())
-    return '{"msg":"Started"}'
+    try:
+        if not start_set_thread(second_thread):
+            return error_response('A set is already running.', 409)
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    return json_response({'msg': 'Started'})
 
 def sprint_second_thread():
     ss.LedStrand.clear_strand()
@@ -337,9 +658,12 @@ def sprint_second_thread():
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/startsprint')
 def startsprint(request):
-    # local_stop()
-    _thread.start_new_thread(sprint_second_thread, ())
-    return '{"msg":"Started"}'
+    try:
+        if not start_set_thread(sprint_second_thread):
+            return error_response('A set is already running.', 409)
+    except ValueError as exc:
+        return error_response(str(exc), 400)
+    return json_response({'msg': 'Started'})
 
 
 def local_stop():

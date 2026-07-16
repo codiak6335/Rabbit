@@ -108,6 +108,29 @@
             padding: 0 16px 16px 16px;
         }
 
+        .pool-profile {
+            padding: 0 16px 16px 16px;
+        }
+
+        .profile-wrap {
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .profile-canvas {
+            display: block;
+            width: 100%;
+            height: 260px;
+        }
+
+        .profile-meta {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.4;
+            margin-top: 8px;
+        }
+
         .led-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(10px, 1fr));
@@ -175,6 +198,13 @@
             <div class="led-strip">
                 <div class="card-label">LED Strip</div>
                 <div class="led-grid" id="led-grid"></div>
+            </div>
+            <div class="pool-profile">
+                <div class="card-label">Pool Bottom Depth Map</div>
+                <div class="profile-wrap">
+                    <canvas class="profile-canvas" id="pool-profile-canvas"></canvas>
+                    <div class="profile-meta" id="pool-profile-meta">Loading pool profile...</div>
+                </div>
             </div>
         </section>
     </div>

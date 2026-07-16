@@ -245,7 +245,7 @@ class SwimSet:
 
         self.lowestLed = 1000000
         self.highestLed = -1
-        self.ms_buffer = [0] * 1000
+        self.ms_buffer = [0] * self.STRANDLENGTH
         self.RunningMode = False
 
         self.AudioAlert = CAudioAlert()
@@ -253,7 +253,7 @@ class SwimSet:
         self.length_plan_ms = []
         self.length_index = 0
         self.current_length_ms = 0
-        self.pixel_step_fraction = [0.0] * 1000
+        self.pixel_step_fraction = [0.0] * self.STRANDLENGTH
         self.PixelProgress = None
 
     def use_audio(self, flag):
@@ -341,58 +341,78 @@ class SwimSet:
         self.current_length_ms = self.length_plan_ms[0]
         self.lowestLed = 1000000
         self.highestLed = -1
-        self.ms_buffer = [0] * 1000
-        self.pixel_step_fraction = [0.0] * 1000
+        self.ms_buffer = [0] * self.STRANDLENGTH
 
         pool_length = self.length
-        led = self.FIRSTPIXEL
         du = 0.0
         pool_length_in_feet = float(pool_length * 3.0)
 
         print(f'length plan ms : {self.length_plan_ms}')
         for section in self.BottomSectionMap:
-            print("Sections : {section}")
+            print(f"Sections : {section}")
+            section_led_count = section[LEDEND] - section[LEDSTART]
+            if section_led_count <= 0:
+                raise ValueError(f'Invalid pool section LED range: {section}')
             if section[LEDSTART] < self.lowestLed:
                 self.lowestLed = section[LEDSTART]
             if self.highestLed <= section[LEDEND]:
                 self.highestLed = section[LEDEND]
+
+        timing_size = max(self.STRANDLENGTH, self.highestLed + 1)
+        self.pixel_step_fraction = [0.0] * timing_size
+        led = self.FIRSTPIXEL
+        for section in self.BottomSectionMap:
             percentage_of_length = float(float(section[FEET]) / pool_length_in_feet)
 
             section_led_count = section[LEDEND] - section[LEDSTART]
             led_step_fraction = percentage_of_length / section_led_count
             for loop in range(section[LEDSTART], section[LEDEND]):
+                if led >= len(self.pixel_step_fraction):
+                    self.pixel_step_fraction.extend([0.0] * (led - len(self.pixel_step_fraction) + 1))
                 du += led_step_fraction
                 self.pixel_step_fraction[led] = led_step_fraction
                 led += 1
 
         print(f'{self.FIRSTPIXEL}, {self.lowestLed}, {self.highestLed}')
-        print(f'pixel step fraction : {self.pixel_step_fraction}')
+        print(f'pixel timing entries : {len(self.pixel_step_fraction)}')
 
-        self.TimeHacks = {True: [0.0] * 1000}
+        timing_size = max(len(self.pixel_step_fraction), self.highestLed + 1)
+        self.TimeHacks = {True: [0.0] * timing_size}
         cumulative = 0.0
         for x in range(self.lowestLed, self.highestLed):
             cumulative += self.pixel_step_fraction[x]
             self.TimeHacks[True][x] = cumulative
 
-        self.TimeHacks[False] = [0.0] * 1000
+        self.TimeHacks[False] = [0.0] * timing_size
         cumulative = 0.0
         self.TimeHacks[False][self.highestLed] = 0.0
         for x in range(self.highestLed - 1, self.lowestLed - 1, -1):
             cumulative += self.pixel_step_fraction[x]
             self.TimeHacks[False][x] = cumulative
 
-        print(gc.mem_alloc(), gc.mem_free(), gc.collect())
-        print(gc.mem_alloc(), gc.mem_free())
+        if hasattr(gc, 'mem_alloc') and hasattr(gc, 'mem_free'):
+            print(gc.mem_alloc(), gc.mem_free(), gc.collect())
+            print(gc.mem_alloc(), gc.mem_free())
 
-        print(gc.mem_alloc(), gc.mem_free(), gc.collect())
-        print(gc.mem_alloc(), gc.mem_free())
+            print(gc.mem_alloc(), gc.mem_free(), gc.collect())
+            print(gc.mem_alloc(), gc.mem_free())
+        else:
+            gc.collect()
         #        print(f'l buffer : {self.TimeHacks[False]}")
 
         self.calc15_meter_locations()
-        print(f'timehacks : {self.TimeHacks}')
+        print(f'timehack entries : {len(self.TimeHacks[True])}')
 
     def stop_set(self):
         self.RunningMode = False
+
+    def sleep_rest_interval(self, rest_interval):
+        end_time = time.ticks_ms() + int(rest_interval * timescale)
+        while self.RunningMode:
+            remaining_ms = time.ticks_diff(end_time, time.ticks_ms())
+            if remaining_ms <= 0:
+                break
+            time.sleep(min(0.1, remaining_ms / timescale))
 
     # noinspection PyPep8
     def direction_changed(self):
@@ -474,8 +494,7 @@ class SwimSet:
             if self.length_index >= len(self.length_plan_ms):
                 break
             if not self.next_pixel():
-                if self.length_index >= len(self.length_plan_ms):
-                    break
+                break
             if self.currentPixel != self.lastPixel:
                 self.lastPixel = self.currentPixel
                 self.drawcount += 1
@@ -489,41 +508,43 @@ class SwimSet:
         self.RunningMode = True
         self.lastPixel = -1
         reps = 0
-        while self.RunningMode and (self.repetitions == 0 or reps < self.repetitions):
+        try:
+            while self.RunningMode and (self.repetitions == 0 or reps < self.repetitions):
+                self.display.fill(self.display.black)
+                self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
+                # self.OLED.text(netstr[0],1,12,self.OLED.white)
+                self.display.text(f'Status: {reps} of {self.repetitions}', 1, 22, self.display.white)
+                self.display.show()
+
+                start_time = time.ticks_ms()
+
+                self.rep()
+
+                if self.RunningMode:
+                    reps += 1
+
+                    elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
+                    print(f'{self.interval}, {elapsed_time}')
+                    rest_interval = (self.interval * timescale - elapsed_time) / timescale
+
+                    print(f'{reps} of {self.repetitions} repetitions completed.')
+
+                    if rest_interval < 0:
+                        print('Slow poke, elapsed_time exceeded the interval!')
+                        # should validate this on input and not allow it to happen
+                        print('No rest for you!')
+                    else:
+                        if reps < self.repetitions:
+                            print(f'Resting Interval : {rest_interval}')
+                            self.sleep_rest_interval(rest_interval)
+        finally:
+            self.RunningMode = False
+            self.Stopped = True
             self.display.fill(self.display.black)
             self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
             # self.OLED.text(netstr[0],1,12,self.OLED.white)
-            self.display.text(f'Status: {reps} of {self.repetitions}', 1, 22, self.display.white)
+            self.display.text("Status: Idle", 1, 22, self.display.white)
             self.display.show()
-
-            start_time = time.ticks_ms()
-
-            self.rep()
-
-            if self.RunningMode:
-                reps += 1
-
-                elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
-                print(f'{self.interval}, {elapsed_time}')
-                rest_interval = (self.interval * timescale - elapsed_time) / timescale
-
-                print(f'{reps} of {self.repetitions} repetitions completed.')
-
-                if rest_interval < 0:
-                    print('Slow poke, elapsed_time exceeded the interval!')
-                    # should validate this on input and not allow it to happen
-                    print('No rest for you!')
-                else:
-                    if reps < self.repetitions:
-                        print(f'Resting Interval : {rest_interval}')
-                        time.sleep(rest_interval)
-
-        self.Stopped = False
-        self.display.fill(self.display.black)
-        self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
-        # self.OLED.text(netstr[0],1,12,self.OLED.white)
-        self.display.text("Status: Idle", 1, 22, self.display.white)
-        self.display.show()
 
 
 
@@ -534,31 +555,32 @@ class SwimSet:
         self.lastPixel = -1
         reps = 0
         direction = self.Direction
-        while self.RunningMode:
+        try:
+            while self.RunningMode:
+                self.display.fill(self.display.black)
+                self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
+                # self.OLED.text(netstr[0],1,12,self.OLED.white)
+                self.display.text(f'Infinite Sprint Mode', 1, 22, self.display.white)
+                self.display.show()
+
+                start_time = time.ticks_ms()
+                self.rep(threeBeeps=False)
+                self.Direction = direction
+                if self.RunningMode:
+                    reps += 1
+
+                    elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
+                    print(f'{self.interval}, {elapsed_time}')
+
+                    print(f'{reps} repetitions completed.')
+        finally:
+            self.RunningMode = False
+            self.Stopped = True
             self.display.fill(self.display.black)
             self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
             # self.OLED.text(netstr[0],1,12,self.OLED.white)
-            self.display.text(f'Infinite Sprint Mode', 1, 22, self.display.white)
+            self.display.text("Status: Idle", 1, 22, self.display.white)
             self.display.show()
-
-            start_time = time.ticks_ms()
-            self.rep(threeBeeps=False)
-            self.Direction = direction
-            if self.RunningMode:
-                reps += 1
-
-                elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
-                print(f'{self.interval}, {elapsed_time}')
-                rest_interval = (self.interval * timescale - elapsed_time) / timescale
-
-                print(f'{reps} repetitions completed.')
-
-        self.Stopped = False
-        self.display.fill(self.display.black)
-        self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
-        # self.OLED.text(netstr[0],1,12,self.OLED.white)
-        self.display.text("Status: Idle", 1, 22, self.display.white)
-        self.display.show()
 
 
 
