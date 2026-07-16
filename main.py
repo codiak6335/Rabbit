@@ -1,14 +1,18 @@
 import _thread
+import json
+import os
 import time
 import sys
 
-import network
-import ujson
-import machine
-
 import displays
 from microdot import Microdot, send_file
+from runtime_support import EMULATOR_STATE, IS_EMULATOR, get_machine_module, get_network_module, patch_time_module, project_path
 from swimset import SwimSet
+
+patch_time_module()
+network = get_network_module()
+machine = get_machine_module()
+ujson = json
 
 # from oled233 import OLED_2inch23
 
@@ -33,7 +37,7 @@ def do_access_point():
     ap.config(essid=ssid, password=password)
     ap.active(True)
 
-    while not ap.active():
+    while not ap.active:
         pass
 
     print("Access point active")
@@ -51,7 +55,7 @@ def do_connection_management():
     wlan.active(False)
     time.sleep(3)
 
-    profiles = read_profiles('/db/wifi.json')
+    profiles = read_profiles(project_path('/db/wifi.json'))
     for wifi in profiles:
         if wifi['active'] != 0:
             wlan = do_connect(wifi['ssid'], wifi['password'])
@@ -104,7 +108,7 @@ def debug(request):
 
 @app.route('/saveaslastled/<path:path>')
 def save_as_last_led(request, path):
-    with open('/db/lastled.dat', "w") as file1:
+    with open(project_path('/db/lastled.dat'), "w") as file1:
         file1.write(f"{int(path)}")
     return '{"msg":"saved"}'
 
@@ -119,30 +123,29 @@ def ignite_led_location(request, path):
 
 # noinspection PyUnusedLocal
 @app.route('/prototypes/<path:path>')
-def prototypes(request, path):
-    return send_file('prototypes/' + path)
+def index(request, path):
+    return send_file(project_path('prototypes/' + path))
 
 
 
 # noinspection PyUnusedLocal
 @app.route('/')
-def home(request):
-    return send_file('index.html')
+def index(request):
+    return send_file(project_path('index.html'))
 
 @app.route('/favicon.ico')
-def favicon(request):
-    return send_file('favicon.ico')
+def index(request):
+    return send_file(project_path('favicon.ico'))
 
 
-def get_required_arg(request, key):
-    value = request.args.get(key)
-    if value is None:
-        raise ValueError(f"Missing required parameter: {key}")
-    if isinstance(value, str):
-        value = value.strip()
-    if value == "":
-        raise ValueError(f"Empty required parameter: {key}")
-    return value
+@app.route('/emulator')
+def emulator(request):
+    return send_file(project_path('emulator.html'))
+
+
+@app.route('/api/emulator/state')
+def emulator_state(request):
+    return json.dumps(EMULATOR_STATE.snapshot())
 
 
 def string_to_seconds(input_str):
@@ -196,30 +199,11 @@ def string_to_seconds(input_str):
         return None
 
 
-def parse_duration_list_csv(csv_value):
-    if csv_value is None:
-        return None
-    raw = csv_value.strip()
-    if raw == "":
-        return None
-    values = []
-    for token in raw.split(','):
-        seconds = string_to_seconds(token.strip())
-        if seconds is None:
-            raise ValueError(f"Invalid duration token: {token}")
-        values.append(int(seconds))
-    return values
-
-
-def parse_bool_arg(value, default=False):
-    if value is None:
-        return default
-    normalized = str(value).strip().lower()
-    if normalized in ("1", "true", "yes", "on"):
-        return True
-    if normalized in ("0", "false", "no", "off"):
-        return False
-    raise ValueError(f"Invalid boolean value: {value}")
+def get_variation_fraction(request_args):
+    try:
+        return float(request_args.get('variation', '8')) / 100.0
+    except ValueError:
+        return 0.08
 
 # Example usage:
 #input_string = "01:23:45.67"
@@ -232,40 +216,22 @@ def parse_bool_arg(value, default=False):
 @app.route('/prep')
 def prep(request):
     print("Prepping ")
-    local_stop()
     # local_stop()
     print(request.args)
-    try:
-        duration = string_to_seconds(get_required_arg(request, 'duration'))
-        interval = string_to_seconds(get_required_arg(request, 'interval'))
-        if duration is None or interval is None:
-            return '{"msg":"Invalid duration/interval format"}', 400
-
-        distance = int(get_required_arg(request, 'distance'))
-        repetitions = int(get_required_arg(request, 'repetitions'))
-        direction = get_required_arg(request, 'direction') == "Near"
-        pool = get_required_arg(request, 'pool')
-        audio = get_required_arg(request, 'audio')
-        pace_durations = parse_duration_list_csv(request.args.get('paceDurations'))
-        sprint_durations = parse_duration_list_csv(request.args.get('sprintDurations'))
-        pace_stagger = parse_bool_arg(request.args.get('stagger'), default=True)
-    except ValueError as e:
-        return '{"msg":"' + str(e) + '"}', 400
-
-    print(f'duration = {duration}')
-    print(f'interval = {interval}')
-    ss.set_bottom_times(
-        int(duration),
-        distance,
-        int(interval),
-        repetitions,
-        25,
-        direction,
-        pool
-    )
-    ss.configure_cursors(pace_durations, sprint_durations)
-    ss.set_pace_stagger(pace_stagger)
-    ss.use_audio(audio)
+    print(request.args['audio'])
+    print(request.args['duration'][0])
+    duration_seconds = string_to_seconds(request.args['duration'])
+    interval_seconds = string_to_seconds(request.args['interval'])
+    strategy = request.args.get('strategy', 'even')
+    variation = get_variation_fraction(request.args)
+    #ss.set_bottom_times()
+    print(f'duration = {duration_seconds}')
+    print(f'interval = {interval_seconds}')
+    print(f'strategy = {strategy}, variation = {variation}')
+    ss.set_bottom_times(int(duration_seconds), int(request.args['distance']), int(interval_seconds),
+                        int(request.args['repetitions']), 25, request.args['direction'] == "Near",
+                        request.args['pool'], strategy, variation)
+    ss.use_audio(request.args['audio'])
     return '{"msg":"Prepped"}'
 
 
@@ -277,13 +243,11 @@ def db(request, path):
     # directory traversal is not allowed
         return 'Not found', 404
     if request.method == 'GET':
-        return send_file("/db/"+path)
+        return send_file(project_path("/db/" + path))
     elif request.method == 'POST':
         print(request.body)
-        body = request.body
-        if isinstance(body, bytes):
-            body = body.decode('utf-8')
-        with open('/db/'+path, "w") as json_file:
+        body = request.body.decode() if isinstance(request.body, bytes) else request.body
+        with open(project_path('/db/' + path), "w") as json_file:
             json_file.write(body)
             
         return '{"msg":"Saved"}'
@@ -297,16 +261,16 @@ def css(request, path):
     if '..' in path:
     # directory traversal is not allowed
         return 'Not found', 404
-    return send_file("/css/"+path)
+    return send_file(project_path("/css/" + path))
 
 # noinspection PyUnusedLocal
 @app.route('/js/<path:path>')
-def js(request, path):
+def css(request, path):
     print("js ", path)
     if '..' in path:
     # directory traversal is not allowed
         return 'Not found', 404
-    return send_file("/js/"+path)
+    return send_file(project_path("/js/" + path))
 
 
 
@@ -317,7 +281,7 @@ def static(request, path):
     if '..' in path:
     # directory traversal is not allowed
         return 'Not found', 404
-    return send_file("/static/"+path)
+    return send_file(project_path("/static/" + path))
 
 
 # noinspection PyUnusedLocal
@@ -351,48 +315,29 @@ def light_segment(request):
 # noinspection PyUnusedLocal,SpellCheckingInspection
 @app.route('/ignitemarkers')
 def ignite_markers(request):
-    ss.LedStrand.ignite_markers()
-    return '{"msg":"MarkersLit"}'
+    ss.LedStrand.ignite_markers(ss.debug)
 
 
 def second_thread():
     ss.LedStrand.clear_strand()
-    try:
-        ss.loop()
-    except Exception as e:
-        print(f"Error in swim loop: {e}")
-        ss.stop_set()
-        ss.Stopped = True
+    ss.loop()
 
 
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/start')
 def start(request):
-    if not ss.Stopped or ss.RunningMode:
-        return '{"msg":"Already running"}', 409
-    if not ss.is_prepared():
-        return '{"msg":"Not prepared. Call /prep before /start"}', 400
-    ss.Stopped = False
+    # local_stop()
     _thread.start_new_thread(second_thread, ())
     return '{"msg":"Started"}'
 
 def sprint_second_thread():
     ss.LedStrand.clear_strand()
-    try:
-        ss.sprintloop()
-    except Exception as e:
-        print(f"Error in sprint loop: {e}")
-        ss.stop_set()
-        ss.Stopped = True
+    ss.sprintloop()
 
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/startsprint')
 def startsprint(request):
-    if not ss.Stopped or ss.RunningMode:
-        return '{"msg":"Already running"}', 409
-    if not ss.is_prepared():
-        return '{"msg":"Not prepared. Call /prep before /startsprint"}', 400
-    ss.Stopped = False
+    # local_stop()
     _thread.start_new_thread(sprint_second_thread, ())
     return '{"msg":"Started"}'
 
@@ -402,7 +347,7 @@ def local_stop():
         print("stopping")
         ss.stop_set()
         i = 0
-        while not ss.Stopped and i < 50:
+        while not ss.Stopped and i < 20:
             time.sleep(0.1)  # give the thread a chance to exit cleanly
             i += 1
         print("Stopped")
@@ -414,7 +359,7 @@ def local_stop():
 # noinspection PyUnusedLocal,SpellCheckingInspection
 @app.route('/loadpools')
 def load_pools(request):
-    pools_filename = "/data/Pools.json"
+    pools_filename = project_path("/data/Pools.json")
     f = open(pools_filename, 'r')
     settings_string = f.read()
     f.close()
@@ -428,7 +373,10 @@ def load_pools(request):
 # noinspection PyUnusedLocal,SpellCheckingInspection
 @app.route('/HardReset')
 def hardreset(request):
-    machine.reset()
+    try:
+        machine.reset()
+    except SystemExit as exc:
+        return '{"msg":"reset-emulated"}'
     return "{msg:reset}"
 
 # OLED = OLED_2inch23()
@@ -436,12 +384,19 @@ display.fill(display.black)
 display.text("FTL Rabbit v2.0", 1, 2, display.white)
 display.text("Network Starting", 1, 12, display.white)
 display.show()
-#netstr = do_access_point()
-netstr = do_connection_management()
+if IS_EMULATOR:
+    netstr = ('127.0.0.1',)
+else:
+    netstr = do_connection_management()
 display.fill(display.black)
 display.text("FTL Rabbit v2.0", 1, 2, display.white)
 display.text(netstr[0], 1, 12, display.white)
 display.text("Status: Idle", 1, 22, display.white)
 display.show()
 
-app.run(debug=True, port=80)
+default_host = '0.0.0.0' if IS_EMULATOR else '0.0.0.0'
+default_port = 5000 if IS_EMULATOR else 80
+run_host = os.getenv('RABBIT_HOST', default_host)
+run_port = int(os.getenv('RABBIT_PORT', default_port))
+print(f'Rabbit server starting on http://{run_host}:{run_port}')
+app.run(host=run_host, debug=True, port=run_port)

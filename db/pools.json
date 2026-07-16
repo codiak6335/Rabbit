@@ -2,57 +2,46 @@
   "defaultPool": "Bellevue East",
   "pools": {
     "Bellevue East": {
-      "PixelCount": 883,
+      "PixelCount": 881,
       "Length": "25 yards",
       "Segments": [
         {
-          "FirstPixel": 164,
-          "Distance": 0,
-          "depth": 5,
-          "detail": "baseline"
+          "FirstPixel": 162,
+          "Distance": 0
         },
         {
-          "FirstPixel": 287,
-          "Distance": 11.37,
-          "detail": "down",
-          "depth": 12
+          "FirstPixel": 285,
+          "Distance": 11.17
         },
         {
-          "FirstPixel": 365,
-          "Distance": 19.95,
-          "detail": "flat",
-          "depth": 12
+          "FirstPixel": 366,
+          "Distance": 20.05
         },
         {
-          "FirstPixel": 516,
-          "Distance": 34.6,
-          "detail": "up",
-          "depth": 5
-        },
-        {
-          "depth": 3
+          "FirstPixel": 517,
+          "Distance": 34.74
         }
       ]
     },
     "Bellevue West": {
-      "PixelCount": 882,
+      "PixelCount": 879,
       "Length": "25 yards",
       "Segments": [
         {
-          "FirstPixel": 168,
+          "FirstPixel": 165,
           "Distance": 0
         },
         {
-          "FirstPixel": 248,
-          "Distance": 6.28
+          "FirstPixel": 240,
+          "Distance": 6.5
         },
         {
-          "FirstPixel": 329,
-          "Distance": 15.45
+          "FirstPixel": 324,
+          "Distance": 15.5
         },
         {
-          "FirstPixel": 518,
-          "Distance": 34.88
+          "FirstPixel": 519,
+          "Distance": 35
         }
       ]
     },

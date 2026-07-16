@@ -83,7 +83,7 @@ header("Expires: 0"); // Proxies
                     </select></th>
         </tr>
         <tr>
-            <th class="left-aligned-label"><label for="duration">Duration(s) CSV [HH:]mm:ss.ss</label></th>
+            <th class="left-aligned-label"><label for="duration">Duration hh:mm:ss.ss</label></th>
             <th><input name="duration" id="duration" value="2:00.00" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
         </tr>
         <tr>
@@ -99,8 +99,16 @@ header("Expires: 0"); // Proxies
             <th><input name="interval" id="interval" value="2:30.00" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
         </tr>
         <tr>
-            <th class="left-aligned-label"><label for="stagger">Stagger</label></th>
-            <th><input id="stagger" type="checkbox" checked/></th>
+            <th class="left-aligned-label"><label for="strategy">Pace Strategy</label></th>
+            <th><select id="strategy" class="selection">
+                         <option value="even">Even</option>
+                         <option value="negative_split">Negative Split</option>
+                         <option value="surge">Surge</option>
+                    </select></th>
+        </tr>
+        <tr>
+            <th class="left-aligned-label"><label for="variation">Change %</label></th>
+            <th><input name="variation" id="variation" value="8" class="text-entry"/></th>
         </tr>
     </table>
 
@@ -134,8 +142,20 @@ header("Expires: 0"); // Proxies
                     </select></th>
         </tr>
         <tr>
-            <th class="left-aligned-label"><label for="duration">Duration(s) CSV [HH:]mm:ss.ss</label></th>
-            <th><input name="duration" id="ssduration" value="0:10.00" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
+            <th class="left-aligned-label"><label for="duration">Duration hh:mm:ss.ss</label></th>
+            <th><input name="duration" id="ssduration" value="0:10.0" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
+        </tr>
+        <tr>
+            <th class="left-aligned-label"><label for="ssstrategy">Pace Strategy</label></th>
+            <th><select id="ssstrategy" class="selection">
+                         <option value="even">Even</option>
+                         <option value="negative_split">Negative Split</option>
+                         <option value="surge">Surge</option>
+                    </select></th>
+        </tr>
+        <tr>
+            <th class="left-aligned-label"><label for="ssvariation">Change %</label></th>
+            <th><input name="variation" id="ssvariation" value="8" class="text-entry"/></th>
         </tr>
     </table>
  

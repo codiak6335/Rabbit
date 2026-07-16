@@ -28,26 +28,24 @@ class CCursor:
         # print (self.iFirstPixel, self.iPixelCount)
         i = self.iFirstPixel
         for x in range(self.iPipLength):
-            if (i >= self.CLedStrand.iLowestLed) and (i <= self.CLedStrand.iHighestLed):
+            if (i >= self.CLedStrand.iLowestLed) and (i < self.CLedStrand.iHighestLed):
                 self.CLedStrand.Strand[i] = color
             i += 1
 
-    def draw(self, primary_pixel, pip_on, clear_before=True, write_after=True):
+    def draw(self, primary_pixel, pip_on):
         if pip_on:
 
             # print ("Primary Pixel :", PrimaryPixel)
             self.pixelCount += 1
             self.lastPP = primary_pixel
 
-            if clear_before:
-                self.fill_pip((0, 0, 0))
-                self.CLedStrand.draw15s()
+            self.fill_pip((0, 0, 0))
+            self.CLedStrand.draw15s()
 
             self.iFirstPixel = primary_pixel + self.iPipBase
             self.fill_pip(self.aColorSecond)
 
-            if (primary_pixel >= self.CLedStrand.iLowestLed) and (primary_pixel <= self.CLedStrand.iHighestLed):
+            if (primary_pixel >= self.CLedStrand.iLowestLed) and (primary_pixel < self.CLedStrand.iHighestLed):
                 self.CLedStrand.Strand[primary_pixel] = self.aColorPrime
 
-            if write_after:
-                self.CLedStrand.Strand.write()
+            self.CLedStrand.Strand.write()

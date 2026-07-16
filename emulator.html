@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rabbit Emulator</title>
+    <style>
+        :root {
+            --bg: #101417;
+            --panel: #182026;
+            --panel-border: #28343d;
+            --text: #eef4f7;
+            --muted: #9fb0ba;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #1d2b34 0%, var(--bg) 55%);
+            color: var(--text);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(360px, 420px) 1fr;
+            gap: 16px;
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        .panel {
+            background: rgba(24, 32, 38, 0.92);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h1,
+        .panel-header h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        iframe {
+            width: 100%;
+            height: calc(100vh - 82px);
+            border: 0;
+            background: white;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            padding: 16px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .card-label {
+            color: var(--muted);
+            font-size: 12px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .card-value {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .display-lines,
+        .audio-events {
+            padding: 0 16px 16px 16px;
+            color: var(--muted);
+        }
+
+        .display-lines pre,
+        .audio-events pre {
+            margin: 0;
+            white-space: pre-wrap;
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: 12px;
+            padding: 12px;
+            min-height: 88px;
+        }
+
+        .led-strip {
+            padding: 0 16px 16px 16px;
+        }
+
+        .led-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(10px, 1fr));
+            gap: 4px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: 12px;
+        }
+
+        .pixel {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 999px;
+            background: #111;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+        }
+
+        @media (max-width: 960px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            iframe {
+                height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <section class="panel">
+            <div class="panel-header">
+                <h1>Control UI</h1>
+                <a href="/" target="_blank" rel="noreferrer" style="color: var(--muted);">open standalone</a>
+            </div>
+            <iframe src="/"></iframe>
+        </section>
+        <section class="panel">
+            <div class="panel-header">
+                <h2>LED Emulator</h2>
+                <span id="connection-status" style="color: var(--muted);">connecting</span>
+            </div>
+            <div class="status-grid">
+                <div class="card">
+                    <div class="card-label">Pixels</div>
+                    <div class="card-value" id="pixel-count">0</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Lit</div>
+                    <div class="card-value" id="lit-count">0</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Last Audio</div>
+                    <div class="card-value" id="last-audio">none</div>
+                </div>
+            </div>
+            <div class="display-lines">
+                <div class="card-label">Display</div>
+                <pre id="display-lines">Waiting for emulator state...</pre>
+            </div>
+            <div class="audio-events">
+                <div class="card-label">Audio Events</div>
+                <pre id="audio-events">No audio events yet.</pre>
+            </div>
+            <div class="led-strip">
+                <div class="card-label">LED Strip</div>
+                <div class="led-grid" id="led-grid"></div>
+            </div>
+        </section>
+    </div>
+    <script src="/js/emulator.js" defer></script>
+</body>
+</html>

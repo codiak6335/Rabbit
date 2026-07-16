@@ -1,2 +1,9 @@
 ~/Rabbit/db/wifi.json
 wifi.json
+db/wifi.json
+.gitnexus/
+__pycache__/
+.idea/
+*.py[cod]
+*.log
+.DS_Store
