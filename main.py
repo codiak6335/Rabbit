@@ -22,6 +22,7 @@ display = displays.get_display()
 ss = SwimSet(display, False)
 run_lock = _thread.allocate_lock()
 ADMIN_TOKEN = os.getenv('RABBIT_ADMIN_TOKEN', '')
+active_set_mode = None
 
 
 def json_response(payload, status=200):
@@ -145,12 +146,74 @@ def validate_wifi_config(data):
         int(wifi.get('active', 0))
 
 
+def validate_saved_sets_config(data):
+    if not isinstance(data, dict):
+        raise ValueError('sets config must be a JSON object')
+    sets = data.get('sets')
+    if not isinstance(sets, dict):
+        raise ValueError('sets config must include a sets object')
+
+    required_string_fields = ('pool', 'direction', 'audio', 'duration', 'interval', 'strategy', 'variation')
+    pool_names = get_pool_names()
+    for set_name, saved_set in sets.items():
+        if not isinstance(set_name, str) or not set_name.strip():
+            raise ValueError('set names must be non-empty strings')
+        if not isinstance(saved_set, dict):
+            raise ValueError(f'saved set must be an object: {set_name}')
+        mode = saved_set.get('mode')
+        if mode not in ('pace', 'sprint'):
+            raise ValueError(f'saved set mode must be pace or sprint: {set_name}')
+        for field in required_string_fields:
+            if not isinstance(saved_set.get(field), str) or saved_set.get(field) == '':
+                raise ValueError(f'{field} is required for saved set: {set_name}')
+        if saved_set.get('pool') not in pool_names:
+            raise ValueError(f'Unknown pool for saved set: {set_name}')
+        if saved_set.get('direction') not in ('Near', 'Far'):
+            raise ValueError(f'direction must be Near or Far for saved set: {set_name}')
+        if saved_set.get('audio') not in ('Yes', 'No'):
+            raise ValueError(f'audio must be Yes or No for saved set: {set_name}')
+        if saved_set.get('strategy') not in ('even', 'negative_split', 'surge'):
+            raise ValueError(f'strategy must be even, negative_split, or surge for saved set: {set_name}')
+
+        duration_seconds = string_to_seconds(saved_set.get('duration'))
+        interval_seconds = string_to_seconds(saved_set.get('interval'))
+        if duration_seconds is None or duration_seconds <= 0:
+            raise ValueError(f'duration must be greater than zero for saved set: {set_name}')
+        if interval_seconds is None or interval_seconds < duration_seconds:
+            raise ValueError(f'interval must be greater than or equal to duration for saved set: {set_name}')
+
+        distance = int(saved_set.get('distance'))
+        repetitions = int(saved_set.get('repetitions'))
+        if distance <= 0:
+            raise ValueError(f'distance must be greater than zero for saved set: {set_name}')
+        if repetitions < 0:
+            raise ValueError(f'repetitions must be at least zero for saved set: {set_name}')
+
+        if saved_set.get('strategy') == 'negative_split':
+            last_duration_seconds = string_to_seconds(saved_set.get('variation'))
+            if last_duration_seconds is None or last_duration_seconds <= 0:
+                raise ValueError(f'last target duration must be greater than zero for saved set: {set_name}')
+            if last_duration_seconds >= duration_seconds:
+                raise ValueError(f'last target duration must be less than first target duration for saved set: {set_name}')
+            if interval_seconds < last_duration_seconds:
+                raise ValueError(f'interval must be greater than or equal to last target duration for saved set: {set_name}')
+        else:
+            try:
+                variation = float(saved_set.get('variation'))
+            except ValueError:
+                raise ValueError(f'variation must be a number for saved set: {set_name}')
+            if variation < 0:
+                raise ValueError(f'variation must be at least zero for saved set: {set_name}')
+
+
 def validate_db_json(path, data):
     normalized = path.lower()
     if normalized == 'pools.json':
         validate_pools_config(data)
     elif normalized == 'wifi.json':
         validate_wifi_config(data)
+    elif normalized == 'sets.json':
+        validate_saved_sets_config(data)
 
 
 def write_json_atomic(file_path, data):
@@ -529,6 +592,73 @@ def emulator_state(request):
     return json.dumps(snapshot)
 
 
+def format_status_seconds(seconds):
+    if seconds is None:
+        return None
+    seconds = max(0, int(round(seconds)))
+    return f'{seconds // 60}:{seconds % 60:02d}'
+
+
+def format_status_target_seconds(seconds):
+    if seconds is None:
+        return None
+    seconds = max(0.0, float(seconds))
+    minutes = int(seconds // 60)
+    remaining_seconds = seconds - (minutes * 60)
+    if minutes == 0:
+        return f'{remaining_seconds:.1f}'
+    return f'{minutes}:{remaining_seconds:04.1f}'
+
+
+def set_details():
+    distance = ss.distance
+    target_duration = ss.current_target_duration_seconds()
+    total_target_duration = ss.duration
+    first_target_duration = ss.rep_plan_ms[0] / 1000 if ss.rep_plan_ms else ss.duration
+    last_target_duration = ss.rep_plan_ms[-1] / 1000 if ss.rep_plan_ms else ss.duration
+    next_rep_seconds = ss.seconds_until_next_rep()
+    current_rep = None
+    if ss.completed_reps is not None:
+        current_rep = ss.completed_reps + 1
+    if ss.repetitions and current_rep is not None:
+        current_rep = min(current_rep, ss.repetitions)
+
+    return {
+        'distance': distance,
+        'targetDurationSeconds': target_duration,
+        'targetDurationText': format_status_target_seconds(target_duration),
+        'totalTargetDurationSeconds': total_target_duration,
+        'totalTargetDurationText': format_status_target_seconds(total_target_duration),
+        'firstTargetDurationSeconds': first_target_duration,
+        'firstTargetDurationText': format_status_target_seconds(first_target_duration),
+        'lastTargetDurationSeconds': last_target_duration,
+        'lastTargetDurationText': format_status_target_seconds(last_target_duration),
+        'timeUntilNextRepSeconds': next_rep_seconds,
+        'timeUntilNextRepText': format_status_seconds(next_rep_seconds),
+        'currentRep': current_rep,
+        'repetitions': ss.repetitions,
+    }
+
+
+@app.route('/api/set-status')
+def set_status(request):
+    display_lines = []
+    try:
+        snapshot = EMULATOR_STATE.snapshot()
+        display_lines = snapshot.get('displayLines', [])
+    except Exception:
+        display_lines = []
+
+    return json_response({
+        'running': bool(ss.RunningMode),
+        'stopped': bool(ss.Stopped),
+        'prepped': bool(ss.length_plan_ms),
+        'mode': active_set_mode,
+        'displayLines': display_lines,
+        'setDetails': set_details() if ss.length_plan_ms else None,
+    })
+
+
 @app.route('/api/emulator/pool-profile')
 def emulator_pool_profile(request):
     try:
@@ -605,6 +735,7 @@ def get_variation_fraction(request_args):
 # noinspection SpellCheckingInspection
 @app.route('/prep')
 def prep(request):
+    global active_set_mode
     admin_error = require_admin(request)
     if admin_error:
         return admin_error
@@ -634,17 +765,32 @@ def prep(request):
 
         distance = int_arg(request.args, 'distance', 1)
         repetitions = int_arg(request.args, 'repetitions', 0)
+        mode = request.args.get('mode', 'pace')
+        if mode not in ('pace', 'sprint'):
+            raise ValueError('mode must be pace or sprint')
         strategy = request.args.get('strategy', 'even')
         if strategy not in ('even', 'negative_split', 'surge'):
             raise ValueError('strategy must be even, negative_split, or surge')
-        variation = get_variation_fraction(request.args)
+        last_duration_seconds = None
+        if strategy == 'negative_split':
+            last_duration_seconds = string_to_seconds(required_arg(request.args, 'variation'))
+            if last_duration_seconds is None or last_duration_seconds <= 0:
+                raise ValueError('last target duration must be greater than zero')
+            if last_duration_seconds >= duration_seconds:
+                raise ValueError('last target duration must be less than first target duration for negative split')
+            if interval_seconds < last_duration_seconds:
+                raise ValueError('interval must be greater than or equal to last target duration')
+            variation = 0.0
+        else:
+            variation = get_variation_fraction(request.args)
 
         print(f'duration = {duration_seconds}')
         print(f'interval = {interval_seconds}')
         print(f'strategy = {strategy}, variation = {variation}')
         ss.set_bottom_times(int(duration_seconds), distance, int(interval_seconds),
-                            repetitions, 25, direction == "Near", pool, strategy, variation)
+                            repetitions, 25, direction == "Near", pool, strategy, variation, last_duration_seconds)
         ss.use_audio(audio)
+        active_set_mode = mode
     except (KeyError, ValueError, TypeError) as exc:
         return error_response(str(exc), 400)
 
@@ -717,6 +863,22 @@ def stop(request):
     return json_response({'msg': 'Stopped'})
 
 
+@app.route('/cancel-prep')
+def cancel_prep(request):
+    global active_set_mode
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
+    if ss.RunningMode:
+        return error_response('Cannot cancel prep while a set is running.', 409)
+    ss.length_plan_ms = []
+    ss.length_index = 0
+    ss.current_length_ms = 0
+    ss.startTimeOfThisLength = None
+    active_set_mode = None
+    return json_response({'msg': 'Canceled'})
+
+
 # noinspection PyUnusedLocal
 @app.route('/ClearStrand')
 def clear_strand(request):
@@ -777,6 +939,7 @@ def start_set_thread(target):
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/start')
 def start(request):
+    global active_set_mode
     admin_error = require_admin(request)
     if admin_error:
         return admin_error
@@ -785,6 +948,7 @@ def start(request):
             return error_response('A set is already running.', 409)
     except ValueError as exc:
         return error_response(str(exc), 400)
+    active_set_mode = 'pace'
     return json_response({'msg': 'Started'})
 
 def sprint_second_thread():
@@ -794,6 +958,7 @@ def sprint_second_thread():
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 @app.route('/startsprint')
 def startsprint(request):
+    global active_set_mode
     admin_error = require_admin(request)
     if admin_error:
         return admin_error
@@ -802,6 +967,7 @@ def startsprint(request):
             return error_response('A set is already running.', 409)
     except ValueError as exc:
         return error_response(str(exc), 400)
+    active_set_mode = 'sprint'
     return json_response({'msg': 'Started'})
 
 

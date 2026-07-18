@@ -90,6 +90,9 @@ def main():
             raise AssertionError('emulator reported no pixels')
         if 'flatProgress' not in initial_state:
             raise AssertionError('emulator state did not include flat-water progress')
+        set_status = get_json('/api/set-status')
+        if set_status['running'] or set_status['prepped']:
+            raise AssertionError('fresh emulator should not report a running or prepped set')
         profile = get_json('/api/emulator/pool-profile')
         if not profile.get('ledPositions') or not profile.get('sections'):
             raise AssertionError('emulator reported an incomplete pool profile')
@@ -99,6 +102,32 @@ def main():
         get_json('/loadpools')
         get_json('/IgniteLedLoc/not-a-number', expected_status=400)
         post_json('/db/pools.json', {'defaultPool': 'Missing', 'pools': {}}, expected_status=400)
+        saved_sets = {
+            'sets': {
+                'Smoke Pace': {
+                    'mode': 'pace',
+                    'pool': 'Bellevue East',
+                    'direction': 'Near',
+                    'audio': 'No',
+                    'duration': '30.00',
+                    'distance': 50,
+                    'repetitions': 20,
+                    'interval': '45.00',
+                    'strategy': 'negative_split',
+                    'variation': '28.00',
+                }
+            }
+        }
+        original_sets = get_json('/db/sets.json')
+        post_json('/db/sets.json', saved_sets)
+        loaded_sets = get_json('/db/sets.json')
+        if loaded_sets.get('sets', {}).get('Smoke Pace', {}).get('duration') != '30.00':
+            raise AssertionError(f'saved sets were not persisted: {loaded_sets}')
+        post_json('/db/sets.json', {'sets': {'Bad': {'mode': 'pace'}}}, expected_status=400)
+        invalid_saved_sets = json.loads(json.dumps(saved_sets))
+        invalid_saved_sets['sets']['Smoke Pace']['strategy'] = 'invalid'
+        post_json('/db/sets.json', invalid_saved_sets, expected_status=400)
+        post_json('/db/sets.json', original_sets)
 
         prep_params = {
             'pool': 'Bellevue East',
@@ -106,18 +135,38 @@ def main():
             'audio': 'No',
             'duration': '1.00',
             'distance': '25',
-            'repetitions': '1',
+            'repetitions': '2',
             'interval': '2.00',
             'strategy': 'even',
             'variation': '8',
         }
         get_json('/prep', prep_params)
+        set_status = get_json('/api/set-status')
+        if set_status['running'] or not set_status['prepped'] or set_status['mode'] != 'pace':
+            raise AssertionError(f'pace prep did not update set status: {set_status}')
+        details = set_status.get('setDetails') or {}
+        if details.get('distance') != 25 or details.get('targetDurationText') != '1.0':
+            raise AssertionError(f'pace prep did not expose target set details: {set_status}')
+        if details.get('currentRep') != 1 or details.get('repetitions') != 2:
+            raise AssertionError(f'pace prep did not expose current and total reps: {set_status}')
         get_json('/start')
         get_json('/start', expected_status=409)
         time.sleep(0.2)
         running_state = get_json('/api/emulator/state')
         if not running_state['displayLines']:
             raise AssertionError('emulator display did not update while running')
+        set_status = get_json('/api/set-status')
+        if not set_status['running'] or set_status['mode'] != 'pace':
+            raise AssertionError(f'pace start did not update running status: {set_status}')
+        details = set_status.get('setDetails') or {}
+        if details.get('timeUntilNextRepText') is None:
+            raise AssertionError(f'pace running status did not expose next rep countdown: {set_status}')
+        if details.get('currentRep') != 1 or details.get('repetitions') != 2:
+            raise AssertionError(f'pace running status did not expose current and total reps: {set_status}')
+        if not any(line.startswith('Dist:') for line in set_status.get('displayLines', [])):
+            raise AssertionError(f'pace running display did not include distance and target duration: {set_status}')
+        if not any(line.startswith('Rep:1/2') for line in set_status.get('displayLines', [])):
+            raise AssertionError(f'pace running display did not include current and total reps: {set_status}')
 
         get_json('/stop')
         deadline = time.time() + 3
@@ -128,6 +177,29 @@ def main():
             time.sleep(0.1)
         else:
             raise AssertionError('emulator did not return to idle after stop')
+        set_status = get_json('/api/set-status')
+        if set_status['running'] or not set_status['prepped'] or set_status['mode'] != 'pace':
+            raise AssertionError(f'stop should preserve the prepared pace set: {set_status}')
+        get_json('/cancel-prep')
+        set_status = get_json('/api/set-status')
+        if set_status['running'] or set_status['prepped'] or set_status['mode'] is not None:
+            raise AssertionError(f'cancel prep did not clear set status: {set_status}')
+
+        negative_split_params = prep_params.copy()
+        negative_split_params.update({
+            'duration': '10.00',
+            'distance': '50',
+            'interval': '12.00',
+            'repetitions': '2',
+            'strategy': 'negative_split',
+            'variation': '8.00',
+        })
+        get_json('/prep', negative_split_params)
+        set_status = get_json('/api/set-status')
+        details = set_status.get('setDetails') or {}
+        if details.get('targetDurationText') != '10.0' or details.get('lastTargetDurationText') != '8.0':
+            raise AssertionError(f'negative split status did not expose adjusted current split target: {set_status}')
+        get_json('/cancel-prep')
 
         token_env = env.copy()
         token_env['RABBIT_PORT'] = str(PORT + 1)
@@ -148,6 +220,9 @@ def main():
             get_json('/LightStrand', {'token': 'smoke-token'})
             post_json('/db/pools.json', {'defaultPool': 'Missing', 'pools': {}}, expected_status=403)
             post_json('/db/pools.json', {'defaultPool': 'Missing', 'pools': {}}, expected_status=400, token='smoke-token')
+            post_json('/db/sets.json', saved_sets, expected_status=403)
+            post_json('/db/sets.json', saved_sets, token='smoke-token')
+            post_json('/db/sets.json', original_sets, token='smoke-token')
         finally:
             globals()['BASE_URL'] = token_base
             token_process.terminate()

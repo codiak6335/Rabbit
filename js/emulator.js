@@ -1,34 +1,17 @@
-const ledGrid = document.getElementById('led-grid');
 const pixelCountNode = document.getElementById('pixel-count');
 const litCountNode = document.getElementById('lit-count');
 const displayLinesNode = document.getElementById('display-lines');
 const audioEventsNode = document.getElementById('audio-events');
 const lastAudioNode = document.getElementById('last-audio');
 const connectionStatusNode = document.getElementById('connection-status');
+const poolMapCanvas = document.getElementById('pool-map-canvas');
+const poolMapMetaNode = document.getElementById('pool-map-meta');
 const profileCanvas = document.getElementById('pool-profile-canvas');
 const profileMetaNode = document.getElementById('pool-profile-meta');
 
-let pixels = [];
 let poolProfile = null;
-
-function ensurePixelNodes(count) {
-    if (pixels.length === count) {
-        return;
-    }
-
-    ledGrid.innerHTML = '';
-    pixels = [];
-
-    const fragment = document.createDocumentFragment();
-    for (let index = 0; index < count; index += 1) {
-        const node = document.createElement('div');
-        node.className = 'pixel';
-        node.title = `LED ${index}`;
-        pixels.push(node);
-        fragment.appendChild(node);
-    }
-    ledGrid.appendChild(fragment);
-}
+const CHART_LEFT_PADDING = 52;
+const CHART_RIGHT_PADDING = 32;
 
 function rgbString(rgb) {
     return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
@@ -60,6 +43,163 @@ function pointForLed(led) {
     return poolProfile.ledPositions[led];
 }
 
+function depthColor(depthFeet, minDepth, maxDepth) {
+    const span = Math.max(0.01, maxDepth - minDepth);
+    const t = Math.max(0, Math.min(1, (depthFeet - minDepth) / span));
+    const shallow = [64, 190, 198];
+    const deep = [9, 55, 105];
+    return shallow.map((channel, index) => Math.round(channel + ((deep[index] - channel) * t)));
+}
+
+function depthAtDistance(distanceFeet) {
+    if (!poolProfile || !poolProfile.ledPositions.length) {
+        return 0;
+    }
+
+    let closest = poolProfile.ledPositions[0];
+    let closestDistance = Math.abs(distanceFeet - closest.distanceFeet);
+    for (const position of poolProfile.ledPositions) {
+        const delta = Math.abs(distanceFeet - position.distanceFeet);
+        if (delta < closestDistance) {
+            closest = position;
+            closestDistance = delta;
+        }
+    }
+    return closest.depthFeet;
+}
+
+function renderTopDownPoolMap(state) {
+    if (!poolProfile || !poolMapCanvas) {
+        return;
+    }
+
+    const context = fitCanvasToDisplaySize(poolMapCanvas);
+    const width = poolMapCanvas.clientWidth;
+    const height = poolMapCanvas.clientHeight;
+    const padding = {
+        top: 42,
+        right: CHART_RIGHT_PADDING,
+        bottom: 46,
+        left: CHART_LEFT_PADDING,
+    };
+    const laneWidthFeet = 8;
+    const mapWidth = Math.max(1, width - padding.left - padding.right);
+    const mapHeight = Math.max(1, height - padding.top - padding.bottom);
+    const poolLength = Math.max(poolProfile.lengthFeet, ...poolProfile.ledPositions.map((item) => item.distanceFeet));
+    const depths = poolProfile.ledPositions.map((item) => item.depthFeet);
+    const minDepth = Math.min(...depths);
+    const maxDepth = Math.max(...depths);
+
+    function xFor(distanceFeet) {
+        return padding.left + (distanceFeet / poolLength) * mapWidth;
+    }
+
+    function yFor(offsetFeet) {
+        return padding.top + ((offsetFeet + (laneWidthFeet / 2)) / laneWidthFeet) * mapHeight;
+    }
+
+    context.clearRect(0, 0, width, height);
+    context.fillStyle = '#071117';
+    context.fillRect(0, 0, width, height);
+
+    for (let column = 0; column < mapWidth; column += 1) {
+        const distanceFeet = (column / mapWidth) * poolLength;
+        const depthFeet = depthAtDistance(distanceFeet);
+        const rgb = depthColor(depthFeet, minDepth, maxDepth);
+        context.fillStyle = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        context.fillRect(padding.left + column, padding.top, 1.5, mapHeight);
+    }
+
+    const waterGradient = context.createLinearGradient(0, padding.top, 0, padding.top + mapHeight);
+    waterGradient.addColorStop(0, 'rgba(235, 255, 255, 0.22)');
+    waterGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.03)');
+    waterGradient.addColorStop(1, 'rgba(0, 0, 0, 0.22)');
+    context.fillStyle = waterGradient;
+    context.fillRect(padding.left, padding.top, mapWidth, mapHeight);
+
+    context.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    context.lineWidth = 2;
+    context.strokeRect(padding.left, padding.top, mapWidth, mapHeight);
+
+    context.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+    context.lineWidth = 1;
+    for (const offset of [-2, 0, 2]) {
+        const y = yFor(offset);
+        context.beginPath();
+        context.moveTo(padding.left, y);
+        context.lineTo(padding.left + mapWidth, y);
+        context.stroke();
+    }
+
+    context.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+    context.setLineDash([6, 7]);
+    for (const marker of poolProfile.markers || []) {
+        const x = xFor(marker.distanceFeet);
+        context.beginPath();
+        context.moveTo(x, padding.top);
+        context.lineTo(x, padding.top + mapHeight);
+        context.stroke();
+    }
+    context.setLineDash([]);
+
+    context.fillStyle = 'rgba(238, 244, 247, 0.9)';
+    context.font = '12px IBM Plex Sans, Segoe UI, sans-serif';
+    context.fillText('Near wall', padding.left, padding.top - 16);
+    context.fillText('Far wall', padding.left + mapWidth - 46, padding.top - 16);
+
+    for (const marker of poolProfile.markers || []) {
+        const x = xFor(marker.distanceFeet);
+        const depth = depthAtDistance(marker.distanceFeet);
+        context.fillStyle = 'rgba(238, 244, 247, 0.75)';
+        context.fillText(`${depth.toFixed(1)} ft`, x - 16, padding.top + mapHeight + 22);
+    }
+
+    context.fillStyle = 'rgba(255, 255, 255, 0.26)';
+    for (const position of poolProfile.ledPositions) {
+        const x = xFor(position.distanceFeet);
+        const y = yFor(0);
+        context.beginPath();
+        context.arc(x, y, 1.1, 0, Math.PI * 2);
+        context.fill();
+    }
+
+    for (const pixel of state.litPixels) {
+        const point = pointForLed(pixel.index);
+        if (!point) {
+            continue;
+        }
+        const x = xFor(point.distanceFeet);
+        const y = yFor(0);
+        context.fillStyle = rgbString(pixel.rgb);
+        context.shadowColor = rgbString(pixel.rgb);
+        context.shadowBlur = 12;
+        context.beginPath();
+        context.arc(x, y, 4.5, 0, Math.PI * 2);
+        context.fill();
+    }
+    context.shadowBlur = 0;
+
+    if (state.flatProgress && state.flatProgress.active) {
+        const progress = Math.max(0, Math.min(1, state.flatProgress.fraction));
+        const x = padding.left + (progress * mapWidth);
+        const y = yFor(-2.8);
+        context.fillStyle = '#f7d05c';
+        context.shadowColor = '#f7d05c';
+        context.shadowBlur = 10;
+        context.beginPath();
+        context.moveTo(x + 8, y);
+        context.lineTo(x - 8, y - 6);
+        context.lineTo(x - 8, y + 6);
+        context.closePath();
+        context.fill();
+        context.shadowBlur = 0;
+        context.fillStyle = 'rgba(247, 208, 92, 0.95)';
+        context.fillText(`${Math.round(progress * 100)}%`, Math.min(width - 64, x + 10), y + 4);
+    }
+
+    poolMapMetaNode.textContent = `${poolProfile.poolName} top-down bottom map | ${poolLength.toFixed(0)} ft length | ${minDepth.toFixed(1)}-${maxDepth.toFixed(1)} ft depth`;
+}
+
 function renderPoolProfile(state) {
     if (!poolProfile || !profileCanvas) {
         return;
@@ -68,7 +208,12 @@ function renderPoolProfile(state) {
     const context = fitCanvasToDisplaySize(profileCanvas);
     const width = profileCanvas.clientWidth;
     const height = profileCanvas.clientHeight;
-    const padding = { top: 18, right: 20, bottom: 28, left: 42 };
+    const padding = {
+        top: 18,
+        right: CHART_RIGHT_PADDING,
+        bottom: 28,
+        left: CHART_LEFT_PADDING,
+    };
     const plotWidth = Math.max(1, width - padding.left - padding.right);
     const plotHeight = Math.max(1, height - padding.top - padding.bottom);
     const positions = poolProfile.ledPositions;
@@ -190,29 +335,15 @@ function renderPoolProfile(state) {
 }
 
 function renderState(state) {
-    ensurePixelNodes(state.pixelCount);
     pixelCountNode.textContent = String(state.pixelCount);
     litCountNode.textContent = String(state.litPixels.length);
-
-    for (const node of pixels) {
-        node.style.background = '#111';
-        node.style.boxShadow = 'inset 0 0 0 1px rgba(255, 255, 255, 0.03)';
-    }
-
-    for (const pixel of state.litPixels) {
-        const node = pixels[pixel.index];
-        if (!node) {
-            continue;
-        }
-        node.style.background = rgbString(pixel.rgb);
-        node.style.boxShadow = `0 0 10px ${rgbString(pixel.rgb)}`;
-    }
 
     displayLinesNode.textContent = state.displayLines.length ? state.displayLines.join('\n') : 'Display is idle.';
     audioEventsNode.textContent = state.audioEvents.length
         ? state.audioEvents.map((event) => `${event.ticks_ms}ms  ${event.event}`).join('\n')
         : 'No audio events yet.';
     lastAudioNode.textContent = state.audioEvents.length ? state.audioEvents[state.audioEvents.length - 1].event : 'none';
+    renderTopDownPoolMap(state);
     renderPoolProfile(state);
 }
 
@@ -224,6 +355,7 @@ async function loadPoolProfile() {
         }
         poolProfile = await response.json();
     } catch (error) {
+        poolMapMetaNode.textContent = `Pool map unavailable: ${error.message}`;
         profileMetaNode.textContent = `Pool profile unavailable: ${error.message}`;
     }
 }
