@@ -104,7 +104,7 @@
             min-height: 88px;
         }
 
-        .led-strip {
+        .pool-map {
             padding: 0 16px 16px 16px;
         }
 
@@ -118,9 +118,17 @@
             padding: 12px;
         }
 
+        .map-canvas,
         .profile-canvas {
             display: block;
             width: 100%;
+        }
+
+        .map-canvas {
+            height: 360px;
+        }
+
+        .profile-canvas {
             height: 260px;
         }
 
@@ -129,23 +137,6 @@
             font-size: 12px;
             line-height: 1.4;
             margin-top: 8px;
-        }
-
-        .led-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(10px, 1fr));
-            gap: 4px;
-            padding: 12px;
-            background: rgba(0, 0, 0, 0.22);
-            border-radius: 12px;
-        }
-
-        .pixel {
-            width: 100%;
-            aspect-ratio: 1 / 1;
-            border-radius: 999px;
-            background: #111;
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
         }
 
         @media (max-width: 960px) {
@@ -191,12 +182,15 @@
                 <div class="card-label">Display</div>
                 <pre id="display-lines">Waiting for emulator state...</pre>
             </div>
-            <div class="led-strip">
-                <div class="card-label">LED Strip</div>
-                <div class="led-grid" id="led-grid"></div>
+            <div class="pool-map">
+                <div class="card-label">Swimmer View Pool Map</div>
+                <div class="profile-wrap">
+                    <canvas class="map-canvas" id="pool-map-canvas"></canvas>
+                    <div class="profile-meta" id="pool-map-meta">Loading pool map...</div>
+                </div>
             </div>
             <div class="pool-profile">
-                <div class="card-label">Pool Bottom Depth Map</div>
+                <div class="card-label">Depth Profile</div>
                 <div class="profile-wrap">
                     <canvas class="profile-canvas" id="pool-profile-canvas"></canvas>
                     <div class="profile-meta" id="pool-profile-meta">Loading pool profile...</div>

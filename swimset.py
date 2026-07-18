@@ -201,6 +201,9 @@ class SwimSet:
         self.ms_per_length = None
         self.ms_per_pixel = None
         self.ms_total_time = None
+        self.current_rep_target_seconds = None
+        self.strategy = 'even'
+        self.variation = 0.08
         self.TimeHacks = None
         self.lastPixel = None
         self.drawcount = None
@@ -218,6 +221,11 @@ class SwimSet:
         self.startTimeOfThisLength = None
         self.lastPixel = None
         self.lastRepEnd = None
+        self.completed_reps = 0
+        self.next_display_update_ms = 0
+        self.beep_lead_ms = 0
+        self.next_rep_start_ms = None
+        self.in_rep = False
         self.lastPixel = None
         self.display = display
         self.Direction = True
@@ -251,6 +259,7 @@ class SwimSet:
         self.AudioAlert = CAudioAlert()
         self.meter15s = None
         self.length_plan_ms = []
+        self.rep_plan_ms = []
         self.length_index = 0
         self.current_length_ms = 0
         self.pixel_step_fraction = [0.0] * self.STRANDLENGTH
@@ -258,6 +267,76 @@ class SwimSet:
 
     def use_audio(self, flag):
         self.AudioAlert.use_audio(flag)
+
+    @staticmethod
+    def format_seconds(seconds):
+        if seconds is None:
+            return '--'
+        seconds = max(0, int(round(seconds)))
+        minutes = seconds // 60
+        remaining_seconds = seconds % 60
+        return f'{minutes}:{remaining_seconds:02d}'
+
+    @staticmethod
+    def format_target_seconds(seconds):
+        if seconds is None:
+            return '--'
+        seconds = max(0.0, float(seconds))
+        minutes = int(seconds // 60)
+        remaining_seconds = seconds - (minutes * 60)
+        if minutes == 0:
+            return f'{remaining_seconds:.1f}'
+        return f'{minutes}:{remaining_seconds:04.1f}'
+
+    def seconds_until_next_rep(self):
+        if not self.RunningMode or self.staticStartTime is None:
+            return None
+        if self.repetitions and self.completed_reps >= self.repetitions:
+            return None
+        if self.repetitions and self.in_rep and self.completed_reps + 1 >= self.repetitions:
+            return None
+
+        if self.next_rep_start_ms is not None:
+            return max(0, time.ticks_diff(self.next_rep_start_ms, time.ticks_ms()) / timescale)
+
+        target_seconds = self.current_rep_target_seconds if self.repetitions == 0 else self.interval
+        return max(0, target_seconds - (time.ticks_diff(time.ticks_ms(), self.staticStartTime) / timescale))
+
+    def current_target_duration_seconds(self):
+        if self.current_rep_target_seconds:
+            return self.current_rep_target_seconds
+        if not self.length_plan_ms:
+            return self.duration
+        length_index = self.length_index
+        if length_index < 0:
+            length_index = 0
+        elif length_index >= len(self.length_plan_ms):
+            length_index = len(self.length_plan_ms) - 1
+        return self.length_plan_ms[length_index] / timescale
+
+    def update_set_display(self, status_line=None, force=False):
+        now = time.ticks_ms()
+        if not force and time.ticks_diff(now, self.next_display_update_ms) < 0:
+            return
+        self.next_display_update_ms = now + 500
+
+        target_duration = self.format_target_seconds(self.current_target_duration_seconds())
+        next_rep = self.format_seconds(self.seconds_until_next_rep())
+        rep_text = f'Rep:{self.completed_reps + 1}'
+        if self.repetitions:
+            rep_text = f'Rep:{min(self.completed_reps + 1, self.repetitions)}/{self.repetitions}'
+        if status_line is None:
+            status_line = f'{rep_text} N:{next_rep}'
+            if self.repetitions and self.completed_reps + 1 >= self.repetitions:
+                status_line = f'{rep_text} Final'
+        elif not status_line.startswith('Rep:'):
+            status_line = f'{rep_text} {status_line}'
+
+        self.display.fill(self.display.black)
+        self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
+        self.display.text(f'Dist:{self.distance} Tgt:{target_duration}', 1, 12, self.display.white)
+        self.display.text(status_line, 1, 22, self.display.white)
+        self.display.show()
 
     def qc(self, p):
         led = 0
@@ -284,6 +363,14 @@ class SwimSet:
 
         print(f'15 meter leds = {self.LedStrand.meter15s}')
 
+    def build_rep_plan(self, first_duration, repetitions, strategy='even', last_duration=None):
+        strategy_key = (strategy or 'even').lower().replace('-', '_').replace(' ', '_')
+        if strategy_key != 'negative_split' or repetitions <= 1 or last_duration is None:
+            return [first_duration]
+
+        step = (last_duration - first_duration) / (repetitions - 1)
+        return [first_duration + (step * index) for index in range(repetitions)]
+
     def build_length_plan(self, total_duration, length_count, strategy='even', variation=0.08):
         strategy_key = (strategy or 'even').lower().replace('-', '_').replace(' ', '_')
         if length_count <= 0:
@@ -294,15 +381,7 @@ class SwimSet:
             variation = 0.45
 
         weights = [1.0] * length_count
-        if strategy_key == 'negative_split' and length_count > 1:
-            midpoint = (length_count - 1) / 2.0
-            for index in range(length_count):
-                if midpoint == 0:
-                    weights[index] = 1.0
-                else:
-                    offset = (index - midpoint) / midpoint
-                    weights[index] = 1.0 - (variation * offset)
-        elif strategy_key == 'surge' and length_count > 1:
+        if strategy_key == 'surge' and length_count > 1:
             for index in range(length_count):
                 if index % 2 == 0:
                     weights[index] = 1.0 - variation
@@ -313,7 +392,7 @@ class SwimSet:
         return [total_duration * weight / total_weight for weight in weights]
 
     def set_bottom_times(self, duration=120, distance=200, interval=180, repetitions=20, length=25, direction=True,
-                         pool='Bellevue East', strategy='even', variation=0.08):
+                         pool='Bellevue East', strategy='even', variation=0.08, last_duration=None):
         self.ltime = 0
         if direction:
             print("Near")
@@ -326,9 +405,15 @@ class SwimSet:
         self.length = length
         self.interval = interval
         self.repetitions = repetitions
+        self.strategy = strategy
+        self.variation = variation
         self.length_index = 0
         length_count = max(1, int(round(float(distance) / float(length))))
-        length_plan_seconds = self.build_length_plan(float(duration), length_count, strategy, variation)
+        self.rep_plan_ms = [int(seconds * timescale) for seconds in self.build_rep_plan(
+            float(duration), repetitions, strategy, last_duration
+        )]
+        self.current_rep_target_seconds = self.rep_plan_ms[0] / timescale
+        length_plan_seconds = self.build_length_plan(self.current_rep_target_seconds, length_count, strategy, variation)
         self.length_plan_ms = [int(seconds * timescale) for seconds in length_plan_seconds]
         print(f'dur-dis-lenth {self.duration}, {self.distance}, {self.length}')
         self.seconds_per_length = (self.duration / length_count)
@@ -406,12 +491,13 @@ class SwimSet:
     def stop_set(self):
         self.RunningMode = False
 
-    def sleep_rest_interval(self, rest_interval):
-        end_time = time.ticks_ms() + int(rest_interval * timescale)
+    def sleep_until_next_beep(self, next_start_ms):
         while self.RunningMode:
-            remaining_ms = time.ticks_diff(end_time, time.ticks_ms())
+            beep_start_ms = next_start_ms - self.beep_lead_ms
+            remaining_ms = time.ticks_diff(beep_start_ms, time.ticks_ms())
             if remaining_ms <= 0:
                 break
+            self.update_set_display()
             time.sleep(min(0.1, remaining_ms / timescale))
 
     # noinspection PyPep8
@@ -477,13 +563,30 @@ class SwimSet:
             self.timeIndex = self.maxtimeindex
 
         self.length_index = 0
+        length_count = len(self.length_plan_ms) or max(1, int(round(float(self.distance) / float(self.length))))
+        if self.rep_plan_ms:
+            rep_index = self.completed_reps
+            if rep_index >= len(self.rep_plan_ms):
+                rep_index = len(self.rep_plan_ms) - 1
+            self.current_rep_target_seconds = self.rep_plan_ms[rep_index] / timescale
+            length_plan_seconds = self.build_length_plan(
+                self.current_rep_target_seconds,
+                length_count,
+                self.strategy,
+                self.variation,
+            )
+            self.length_plan_ms = [int(seconds * timescale) for seconds in length_plan_seconds]
         self.current_length_ms = self.length_plan_ms[0]
         print(f'Direction Change : {self.Direction}')
         print(f'Rep starting: {self.currentPixel}')
+        beep_start_ms = time.ticks_ms()
         self.AudioAlert.beeps(threeBeeps)
+        self.beep_lead_ms = max(0, time.ticks_diff(time.ticks_ms(), beep_start_ms))
 
         start_time = time.ticks_ms()  # Pycharm needs a *1000
         self.staticStartTime = start_time
+        self.next_rep_start_ms = self.staticStartTime + int(self.interval * timescale)
+        self.in_rep = True
 
         self.laptimeadjustment = 0
         self.lapcount = 0
@@ -499,8 +602,10 @@ class SwimSet:
                 self.lastPixel = self.currentPixel
                 self.drawcount += 1
                 self.Cursor.draw(self.currentPixel, self.PipOn)
+            self.update_set_display()
 
         self.lastRepEnd = time.ticks_ms()
+        self.in_rep = False
         self.LedStrand.clear_strand()
 
     def loop(self):
@@ -508,35 +613,38 @@ class SwimSet:
         self.RunningMode = True
         self.lastPixel = -1
         reps = 0
+        self.completed_reps = 0
         try:
             while self.RunningMode and (self.repetitions == 0 or reps < self.repetitions):
-                self.display.fill(self.display.black)
-                self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
-                # self.OLED.text(netstr[0],1,12,self.OLED.white)
-                self.display.text(f'Status: {reps} of {self.repetitions}', 1, 22, self.display.white)
-                self.display.show()
+                self.completed_reps = reps
+                self.update_set_display(f'Rep:{reps + 1}/{self.repetitions}', force=True)
 
                 start_time = time.ticks_ms()
 
                 self.rep()
 
                 if self.RunningMode:
+                    next_start_ms = self.next_rep_start_ms
                     reps += 1
+                    self.completed_reps = reps
 
                     elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
                     print(f'{self.interval}, {elapsed_time}')
-                    rest_interval = (self.interval * timescale - elapsed_time) / timescale
+                    rest_interval = 0
+                    if next_start_ms is not None:
+                        rest_interval = time.ticks_diff(next_start_ms - self.beep_lead_ms, time.ticks_ms()) / timescale
 
                     print(f'{reps} of {self.repetitions} repetitions completed.')
 
                     if rest_interval < 0:
-                        print('Slow poke, elapsed_time exceeded the interval!')
+                        print('Slow poke, elapsed_time exceeded the next beep start!')
                         # should validate this on input and not allow it to happen
                         print('No rest for you!')
                     else:
                         if reps < self.repetitions:
                             print(f'Resting Interval : {rest_interval}')
-                            self.sleep_rest_interval(rest_interval)
+                            self.update_set_display(force=True)
+                            self.sleep_until_next_beep(next_start_ms)
         finally:
             self.RunningMode = False
             self.Stopped = True
@@ -554,20 +662,19 @@ class SwimSet:
         self.RunningMode = True
         self.lastPixel = -1
         reps = 0
+        self.completed_reps = 0
         direction = self.Direction
         try:
             while self.RunningMode:
-                self.display.fill(self.display.black)
-                self.display.text("FTL Fish v2.0", 1, 2, self.display.white)
-                # self.OLED.text(netstr[0],1,12,self.OLED.white)
-                self.display.text(f'Infinite Sprint Mode', 1, 22, self.display.white)
-                self.display.show()
+                self.completed_reps = reps
+                self.update_set_display(f'Rep:{reps + 1}', force=True)
 
                 start_time = time.ticks_ms()
                 self.rep(threeBeeps=False)
                 self.Direction = direction
                 if self.RunningMode:
                     reps += 1
+                    self.completed_reps = reps
 
                     elapsed_time = time.ticks_diff(time.ticks_ms(), start_time)
                     print(f'{self.interval}, {elapsed_time}')

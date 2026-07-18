@@ -1,0 +1,40 @@
+{
+  "sets": {
+    "20x200s": {
+      "mode": "pace",
+      "pool": "Bellevue East",
+      "direction": "Near",
+      "audio": "Yes",
+      "duration": "2:00.00",
+      "distance": 200,
+      "repetitions": 20,
+      "interval": "2:30.00",
+      "strategy": "even",
+      "variation": "8"
+    },
+    "20x200": {
+      "mode": "pace",
+      "pool": "Bellevue East",
+      "direction": "Near",
+      "audio": "Yes",
+      "duration": "2:00.00",
+      "distance": 200,
+      "repetitions": 20,
+      "interval": "2:30.00",
+      "strategy": "even",
+      "variation": "8"
+    },
+    "50x50 NEg": {
+      "mode": "pace",
+      "pool": "Bellevue East",
+      "direction": "Near",
+      "audio": "Yes",
+      "duration": "0:32.0",
+      "distance": 50,
+      "repetitions": 50,
+      "interval": "0:40.0",
+      "strategy": "negative_split",
+      "variation": "28.00"
+    }
+  }
+}

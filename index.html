@@ -52,6 +52,7 @@
     <button id="ReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Return</button>
     <button  id="CancelButton" onclick="CancelIt()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Cancel</button>
     <button  id="StopButton" onclick="StopIt()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Stop</button>
+    <div id="paceStatus" style="display:none; text-align:center; margin: 8px auto;">Status: Idle</div>
 
 
     <table id="tableofinputs"  style=" margin: 0 auto;">
@@ -99,11 +100,16 @@
                     </select></th>
         </tr>
         <tr>
-            <th class="left-aligned-label"><label for="variation">Change %</label></th>
+            <th class="left-aligned-label"><label for="variation">Change % / Last Target</label></th>
             <th><input name="variation" id="variation" value="8" class="text-entry"/></th>
         </tr>
     </table>
 
+    <div style="text-align:center; margin: 8px auto;">
+        <select id="savedSets" class="selection"></select>
+        <button onclick="LoadSavedSet('pace')" class="button-prep2 pure-button">Load Set</button>
+        <button onclick="SaveCurrentSet('pace')" class="button-prep2 pure-button">Save Set</button>
+    </div>
     <button  id="PrepButton" onclick="PrepIt()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Prep Set</button>
     <button  id="StartButton" onclick="StartIt()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Start Set</button>
 </div>
@@ -112,6 +118,7 @@
     <button id="ssReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Return</button>
     <button  id="ssCancelButton" onclick="CancelSprint()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Cancel</button>
     <button  id="ssStopButton" onclick="StopSprint()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Stop</button>
+    <div id="sprintStatus" style="display:none; text-align:center; margin: 8px auto;">Status: Idle</div>
 
     <table id="sstableofinputs" style=" margin: 0 auto;">
         <tr>
@@ -146,7 +153,7 @@
                     </select></th>
         </tr>
         <tr>
-            <th class="left-aligned-label"><label for="ssvariation">Change %</label></th>
+            <th class="left-aligned-label"><label for="ssvariation">Change % / Last Target</label></th>
             <th><input name="variation" id="ssvariation" value="8" class="text-entry"/></th>
         </tr>
     </table>
@@ -155,6 +162,11 @@
     <label for="distance"></label><input name="distance" id="ssdistance" value="25" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
     <label for="repetitions"></label><input name="repetitions" id="ssrepetitions" value="25" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
 
+    <div style="text-align:center; margin: 8px auto;">
+        <select id="sssavedSets" class="selection"></select>
+        <button onclick="LoadSavedSet('sprint')" class="button-prep2 pure-button">Load Set</button>
+        <button onclick="SaveCurrentSet('sprint')" class="button-prep2 pure-button">Save Set</button>
+    </div>
     <button  id="ssPrepButton" onclick="PrepSprint()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Prep Set</button>
     <button  id="ssStartButton" onclick="StartSprint()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Start Set</button>
 
