@@ -9,6 +9,7 @@ import displays
 from microdot import Microdot, send_file
 from runtime_support import EMULATOR_STATE, IS_EMULATOR, get_machine_module, get_network_module, patch_time_module, project_path
 from swimset import SwimSet
+from workout_runner import WorkoutPlanError, WorkoutRunner
 
 patch_time_module()
 network = get_network_module()
@@ -20,6 +21,7 @@ ujson = json
 app = Microdot()
 display = displays.get_display()
 ss = SwimSet(display, False)
+workout_runner = WorkoutRunner(ss)
 run_lock = _thread.allocate_lock()
 ADMIN_TOKEN = os.getenv('RABBIT_ADMIN_TOKEN', '')
 active_set_mode = None
@@ -47,6 +49,18 @@ def require_admin(request):
     if supplied_token != ADMIN_TOKEN:
         return error_response('Forbidden', 403)
     return None
+
+
+def request_json(request, maximum_bytes=12288):
+    if request.content_length is not None and request.content_length > maximum_bytes:
+        raise ValueError('Request is too large.')
+    body = request.body.decode() if isinstance(request.body, bytes) else request.body
+    if not body:
+        raise ValueError('A JSON request body is required.')
+    data = json.loads(body)
+    if not isinstance(data, dict):
+        raise ValueError('JSON request body must be an object.')
+    return data
 
 
 def safe_project_file(base_path, request_path):
@@ -160,6 +174,15 @@ def validate_saved_sets_config(data):
             raise ValueError('set names must be non-empty strings')
         if not isinstance(saved_set, dict):
             raise ValueError(f'saved set must be an object: {set_name}')
+        if saved_set.get('format') == 'deckscript':
+            if saved_set.get('version') != 2:
+                raise ValueError(f'unsupported DeckScript version for saved set: {set_name}')
+            source = saved_set.get('source')
+            if not isinstance(source, str) or not source.strip():
+                raise ValueError(f'DeckScript source is required for saved set: {set_name}')
+            if len(source) > 16384:
+                raise ValueError(f'DeckScript source is too large for saved set: {set_name}')
+            continue
         mode = saved_set.get('mode')
         if mode not in ('pace', 'sprint'):
             raise ValueError(f'saved set mode must be pace or sprint: {set_name}')
@@ -649,6 +672,25 @@ def set_status(request):
     except Exception:
         display_lines = []
 
+    if active_set_mode == 'workout' and workout_runner.plan is not None:
+        workout_status = workout_runner.status()
+        seconds_until_next = workout_status.get('secondsUntilNext')
+        return json_response({
+            'running': workout_status.get('running'),
+            'stopped': workout_status.get('stopped'),
+            'prepped': workout_status.get('prepared'),
+            'complete': workout_status.get('complete'),
+            'mode': 'workout',
+            'displayLines': display_lines,
+            'setDetails': {
+                'currentRep': workout_status.get('entryIndex', 0) + 1,
+                'repetitions': workout_status.get('entryCount', 0),
+                'timeUntilNextRepSeconds': seconds_until_next,
+                'timeUntilNextRepText': format_status_seconds(seconds_until_next),
+            },
+            'workout': workout_status,
+        })
+
     is_complete = bool(ss.repetitions and ss.completed_reps >= ss.repetitions)
     return json_response({
         'running': bool(ss.RunningMode),
@@ -735,6 +777,59 @@ def get_variation_fraction(request_args):
 
 
 # noinspection SpellCheckingInspection
+@app.route('/api/workout/prepare', methods=['POST'])
+def prepare_workout(request):
+    global active_set_mode
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
+    if ss.RunningMode or workout_runner.running:
+        return error_response('Cannot prepare while a set is running.', 409)
+
+    try:
+        payload = request_json(request)
+        plan = payload.get('plan', payload)
+        if not isinstance(plan, dict):
+            raise ValueError('plan must be an object.')
+        plan = dict(plan)
+        if not plan.get('pool'):
+            with open(project_path('/db/pools.json'), 'r') as pools_file:
+                plan['pool'] = json.load(pools_file).get('defaultPool')
+        if plan.get('pool') not in get_pool_names():
+            raise ValueError(f"Unknown pool: {plan.get('pool')}")
+        workout_runner.prepare(plan)
+        active_set_mode = 'workout'
+    except (KeyError, TypeError, ValueError, WorkoutPlanError) as exc:
+        return error_response(str(exc), 400)
+
+    return json_response({'msg': 'Prepared', 'status': workout_runner.status()})
+
+
+def workout_second_thread():
+    workout_runner.run()
+
+
+@app.route('/api/workout/start', methods=['POST'])
+def start_workout(request):
+    global active_set_mode
+    admin_error = require_admin(request)
+    if admin_error:
+        return admin_error
+    try:
+        with run_lock:
+            if ss.RunningMode or workout_runner.running:
+                return error_response('A set is already running.', 409)
+            if workout_runner.plan is None:
+                raise WorkoutPlanError('Prepare a workout before starting.')
+            workout_runner.start()
+            _thread.start_new_thread(workout_second_thread, ())
+        active_set_mode = 'workout'
+    except WorkoutPlanError as exc:
+        return error_response(str(exc), 400)
+    return json_response({'msg': 'Started'})
+
+
+# noinspection SpellCheckingInspection
 @app.route('/prep')
 def prep(request):
     global active_set_mode
@@ -746,6 +841,7 @@ def prep(request):
         return error_response('Cannot prep while a set is running.', 409)
 
     try:
+        workout_runner.clear()
         pool = required_arg(request.args, 'pool')
         if pool not in get_pool_names():
             raise ValueError(f'Unknown pool: {pool}')
@@ -861,7 +957,14 @@ def stop(request):
     admin_error = require_admin(request)
     if admin_error:
         return admin_error
-    local_stop()
+    if active_set_mode == 'workout' and workout_runner.plan is not None:
+        workout_runner.stop()
+        wait_count = 0
+        while not workout_runner.stopped and wait_count < 20:
+            time.sleep(0.1)
+            wait_count += 1
+    else:
+        local_stop()
     return json_response({'msg': 'Stopped'})
 
 
@@ -873,6 +976,8 @@ def cancel_prep(request):
         return admin_error
     if ss.RunningMode:
         return error_response('Cannot cancel prep while a set is running.', 409)
+    if workout_runner.plan is not None:
+        workout_runner.clear()
     ss.length_plan_ms = []
     ss.length_index = 0
     ss.current_length_ms = 0
@@ -949,6 +1054,8 @@ def start(request):
     admin_error = require_admin(request)
     if admin_error:
         return admin_error
+    if active_set_mode == 'workout':
+        return error_response('Use the workout start control for this set.', 409)
     try:
         if not start_set_thread(second_thread):
             return error_response('A set is already running.', 409)
@@ -968,6 +1075,8 @@ def startsprint(request):
     admin_error = require_admin(request)
     if admin_error:
         return admin_error
+    if active_set_mode == 'workout':
+        return error_response('Use the workout start control for this set.', 409)
     try:
         if not start_set_thread(sprint_second_thread):
             return error_response('A set is already running.', 409)
@@ -1030,5 +1139,6 @@ default_host = '0.0.0.0' if IS_EMULATOR else '0.0.0.0'
 default_port = 5000 if IS_EMULATOR else 80
 run_host = os.getenv('RABBIT_HOST', default_host)
 run_port = int(os.getenv('RABBIT_PORT', default_port))
+run_debug = os.getenv('RABBIT_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
 print(f'Rabbit server starting on http://{run_host}:{run_port}')
-app.run(host=run_host, debug=True, port=run_port)
+app.run(host=run_host, debug=run_debug, port=run_port)

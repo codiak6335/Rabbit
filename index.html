@@ -79,7 +79,29 @@
                     <span>Prepare set</span><small>Load timing and light positions</small>
                 </button>
                 <button id="editSetButton" class="button button-secondary" type="button">Edit set</button>
+                <button id="deleteSetButton" class="button button-danger is-hidden" type="button">Delete saved set</button>
             </div>
+        </section>
+
+        <section id="builderChoiceScreen" class="screen" aria-labelledby="builderChoiceTitle">
+            <div class="hero hero-compact">
+                <p class="eyebrow">New set</p>
+                <h1 id="builderChoiceTitle">What are you building?</h1>
+                <p class="supporting">Start simple, or describe a full practice with rounds, ladders, and changing targets.</p>
+            </div>
+            <div class="builder-choice-list">
+                <button id="quickBuilderButton" class="builder-choice" type="button">
+                    <span class="choice-icon">1×</span>
+                    <span><strong>Quick repeated set</strong><small>One distance, target, and send-off</small></span><b>›</b>
+                </button>
+                <button id="workoutBuilderButton" class="builder-choice is-featured" type="button">
+                    <span class="choice-icon">{ }</span>
+                    <span><strong>DeckScript workout</strong><small>Rounds, ladders, rests, skills, and progressions</small></span><b>›</b>
+                </button>
+            </div>
+            <button id="copyDeckScriptPromptButton" class="text-button prompt-copy-link" type="button" disabled>
+                Copy ChatGPT DeckScript prompt
+            </button>
         </section>
 
         <section id="editorScreen" class="screen" aria-labelledby="editorTitle">
@@ -121,8 +143,8 @@
                         <label class="field field-wide"><span>Pool</span><select id="setPool"></select></label>
                         <label class="field"><span>Start end</span><select id="setDirection"><option>Near</option><option>Far</option></select></label>
                         <label class="field"><span>Audio</span><select id="setAudio"><option>Yes</option><option>No</option></select></label>
-                        <label class="field"><span>Strategy</span><select id="setStrategy"><option value="even">Even</option><option value="negative_split">Negative split</option><option value="surge">Surge</option></select></label>
-                        <label class="field"><span>Change / final target</span><input id="setVariation" type="text" inputmode="decimal" value="8"></label>
+                        <label class="field"><span>Strategy</span><select id="setStrategy"><option value="even">Even</option><option value="negative_split">Descend</option><option value="surge">Surge</option></select></label>
+                        <label id="setVariationField" class="field is-hidden"><span id="setVariationLabel">Pacing change</span><input id="setVariation" type="text" inputmode="decimal" value="8"></label>
                     </div>
                 </details>
                 <p id="formError" class="inline-error is-hidden" role="alert"></p>
@@ -133,11 +155,55 @@
             </form>
         </section>
 
+        <section id="workoutEditorScreen" class="screen" aria-labelledby="workoutEditorTitle">
+            <div class="hero hero-compact">
+                <p class="eyebrow">DeckScript 2</p>
+                <h1 id="workoutEditorTitle">Build a workout</h1>
+                <p class="supporting">Write the set the way a coach thinks. Coach On Deck checks it and shows exactly what will run.</p>
+            </div>
+            <details class="import-card">
+                <summary>Import a written swim set <span>For example: 4 x 50 :30s</span></summary>
+                <div class="import-fields">
+                    <label class="field field-wide"><span>One set expression</span><textarea id="importSource" rows="3" placeholder="150 :90s + 100 :60s + 50"></textarea></label>
+                    <label class="field field-wide"><span>Hold pace per 100 <em>optional</em></span><input id="importHold" type="text" inputmode="decimal" placeholder="1:00"></label>
+                    <button id="importWorkoutButton" class="button button-secondary" type="button">Convert to DeckScript</button>
+                    <p id="importMessage" class="inline-message"></p>
+                </div>
+            </details>
+            <div class="example-strip" aria-label="Workout examples">
+                <button type="button" data-workout-example="pyramid">Pyramid</button>
+                <button type="button" data-workout-example="rounds">Rounds</button>
+                <button type="button" data-workout-example="negativeSplit">Negative split</button>
+                <button type="button" data-workout-example="continuous">Continuous</button>
+            </div>
+            <label class="script-label" for="workoutSource">
+                <span>Workout</span><small>On = send-off · Hold = pace target</small>
+            </label>
+            <textarea id="workoutSource" class="workout-source" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+            <div id="workoutDiagnostics" class="script-diagnostics" aria-live="polite"></div>
+            <div id="workoutPreview" class="workout-preview"></div>
+            <details class="syntax-guide">
+                <summary>DeckScript quick guide</summary>
+                <pre>10 x 50 easy on :40 hold :25
+repeat 4 rounds {
+    10 x 50 on :40 hold :27 on-change -5s/round hold-change -0.75s/round
+}
+ladder 100 to 500 to 100 step 100 on 1:15 per 100 hold 1:00 per 100
+5 x 500 negative split by :04 on 5:30 hold 4:40
+5 x 500 on 5:30 hold 5:00 descend to 4:40
+rest :30</pre>
+            </details>
+            <div class="action-stack">
+                <button id="reviewWorkoutButton" class="button button-primary" type="button">Review workout</button>
+                <button id="saveWorkoutButton" class="button button-secondary" type="button">Save workout</button>
+            </div>
+        </section>
+
         <section id="deckScreen" class="screen deck-screen" aria-labelledby="deckTitle">
             <div id="deckState" class="deck-state">Ready</div>
             <p id="deckSetName" class="deck-set-name">Selected set</p>
             <div class="rep-display">
-                <span>REP</span>
+                <span id="progressLabel">REP</span>
                 <strong><b id="currentRep">1</b><i>of</i><b id="totalReps">—</b></strong>
             </div>
             <div class="countdown-panel">
@@ -191,6 +257,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </div>
+<script src="js/deckscript.js"></script>
 <script src="js/navigation.js"></script>
 </body>
 </html>

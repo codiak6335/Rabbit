@@ -1,17 +1,5 @@
 {
   "sets": {
-    "20x200s": {
-      "mode": "pace",
-      "pool": "Bellevue East",
-      "direction": "Near",
-      "audio": "Yes",
-      "duration": "2:00.00",
-      "distance": 200,
-      "repetitions": 20,
-      "interval": "2:30.00",
-      "strategy": "even",
-      "variation": "8"
-    },
     "20x200": {
       "mode": "pace",
       "pool": "Bellevue East",
@@ -35,6 +23,16 @@
       "interval": "0:40.0",
       "strategy": "negative_split",
       "variation": "28.00"
+    },
+    "5 x 500 negative split": {
+      "format": "deckscript",
+      "version": 2,
+      "source": "workout \"5 x 500 negative split\"\npool \"Bellevue East\"\ndirection near\naudio yes\n\n5 x 500 negative split by :04 on 5:30 hold 4:40"
+    },
+    "Pyramid 100\u2013500": {
+      "format": "deckscript",
+      "version": 2,
+      "source": "workout \"Pyramid 100\u2013500\"\npool \"Bellevue East\"\ndirection near\naudio yes\n\n50 x 100 s on 1:10 hold :57"
     }
   }
 }

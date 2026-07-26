@@ -34,3 +34,7 @@ RABBIT_ADMIN_TOKEN=change-me python3 main.py
 ```
 
 Open the UI with `?token=change-me` once, or send `X-Rabbit-Token: change-me` from API clients.
+
+## Structured workouts
+
+Coach On Deck supports versioned DeckScript workouts alongside the original Pace and Sprint set paths. See [DeckScript 2](docs/deckscript.md) for timing semantics, nested rounds, progressions, negative splits, shorthand import, and the compact RP2040 execution format.

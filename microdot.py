@@ -1200,9 +1200,6 @@ class Microdot():
                     res = 'Payload too large', 413
             else:
                 f = self.find_route(req)
-                print ('microdot')
-                print (req)
-                print (f)
                 try:
                     res = None
                     if callable(f):
