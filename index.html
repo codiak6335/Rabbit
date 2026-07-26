@@ -1,203 +1,196 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#071a2b">
+    <meta http-equiv="Cache-Control" content="no-store">
     <link rel="stylesheet" href="css/styles.css">
-    <title>FLTA Rabbit Control Center</title>
-
-    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-
+    <title>Coach On Deck</title>
+    <script>
+        (function () {
+            var choice = localStorage.getItem('coachTheme') || 'dark';
+            var dark = choice === 'dark' || (choice === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.dataset.theme = choice;
+            document.documentElement.dataset.resolvedTheme = dark ? 'dark' : 'light';
+        }());
+    </script>
 </head>
 <body>
-    <script src="js/navigation.js" defer></script>
+<div id="app" class="app-shell">
+    <header class="app-header">
+        <button id="backButton" class="icon-button is-hidden" type="button" aria-label="Go back">‹</button>
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true">COD</span>
+            <span>
+                <strong>Coach On Deck</strong>
+                <small id="poolLabel" aria-live="polite">Loading pool…</small>
+            </span>
+        </div>
+        <button id="menuButton" class="icon-button" type="button" aria-label="Open tools">•••</button>
+    </header>
 
-    <header> <img src="static/FTL_320x.jpg" alt="Logo"> </header>
-    <hr>
-    <div id="poolmanagement" style="display:none; text-align: center;">
-        <h1 style="margin: 0 auto;">Edit and Submit JSON</h1>
+    <main>
+        <section id="homeScreen" class="screen is-active" aria-labelledby="homeTitle">
+            <div class="hero">
+                <p class="eyebrow">Ready when you are</p>
+                <h1 id="homeTitle">Choose today’s set</h1>
+                <p class="supporting">Select a saved set, review it, then prepare the deck.</p>
+            </div>
+            <div id="resumeCard" class="resume-card is-hidden">
+                <div>
+                    <span class="status-chip">Set ready</span>
+                    <strong id="resumeTitle">Prepared set</strong>
+                    <small id="resumeMeta"></small>
+                </div>
+                <button id="resumeButton" class="button button-primary button-compact" type="button">Return</button>
+            </div>
+            <div class="section-heading">
+                <h2>Saved sets</h2>
+                <button id="newSetButton" class="text-button" type="button">+ New set</button>
+            </div>
+            <div id="setList" class="set-list" aria-live="polite">
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </section>
 
-        <button id="pmReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Return</button>
-        <textarea id="pmjsonTextarea" rows="10" cols="50" style="margin: 0 auto;">loading...</textarea>
-        <button onclick="fetchAndLoadJSON('pmjsonTextarea','/db/pools.json')" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Reload JSON</button>
-        <button onclick="submitJSON('pmjsonTextarea','/db/pools.json')" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Submit JSON</button>
-    </div>
+        <section id="reviewScreen" class="screen" aria-labelledby="reviewTitle">
+            <div class="hero hero-compact">
+                <p class="eyebrow">Set review</p>
+                <h1 id="reviewTitle">Selected set</h1>
+                <p id="reviewSummary" class="supporting"></p>
+            </div>
+            <div class="review-card">
+                <div class="metric-row">
+                    <div><span>Repetitions</span><strong id="reviewReps">—</strong></div>
+                    <div><span>Distance</span><strong id="reviewDistance">—</strong></div>
+                    <div><span>Send-off</span><strong id="reviewInterval">—</strong></div>
+                </div>
+                <dl class="detail-list">
+                    <div><dt>Target</dt><dd id="reviewTarget">—</dd></div>
+                    <div><dt>Strategy</dt><dd id="reviewStrategy">—</dd></div>
+                    <div><dt>Start</dt><dd id="reviewDirection">—</dd></div>
+                    <div><dt>Audio</dt><dd id="reviewAudio">—</dd></div>
+                </dl>
+            </div>
+            <div class="action-stack">
+                <button id="prepareButton" class="button button-primary" type="button">
+                    <span>Prepare set</span><small>Load timing and light positions</small>
+                </button>
+                <button id="editSetButton" class="button button-secondary" type="button">Edit set</button>
+            </div>
+        </section>
 
-    <div id="networkmanagement" style="display:none; text-align: center;">
-        <h1 style="margin: 0 auto;">Edit and Submit Wifi Details</h1>
+        <section id="editorScreen" class="screen" aria-labelledby="editorTitle">
+            <div class="hero hero-compact">
+                <p class="eyebrow">Set builder</p>
+                <h1 id="editorTitle">Create a set</h1>
+                <p class="supporting">Required timing first. Fine tuning stays optional.</p>
+            </div>
+            <form id="setForm" novalidate>
+                <div class="form-card">
+                    <label class="field field-wide">
+                        <span>Set name <em>optional</em></span>
+                        <input id="setName" type="text" maxlength="48" placeholder="Generated from parameters">
+                    </label>
+                    <label class="field">
+                        <span>Type</span>
+                        <select id="setMode"><option value="pace">Pace</option><option value="sprint">Sprint</option></select>
+                    </label>
+                    <label class="field">
+                        <span>Repetitions</span>
+                        <input id="setRepetitions" type="number" inputmode="numeric" min="1" value="10">
+                    </label>
+                    <label class="field">
+                        <span>Distance</span>
+                        <input id="setDistance" type="number" inputmode="numeric" min="1" value="100">
+                    </label>
+                    <label class="field">
+                        <span>Target time</span>
+                        <input id="setDuration" type="text" inputmode="decimal" value="1:20.0" placeholder="1:20.0">
+                    </label>
+                    <label class="field">
+                        <span>Send-off</span>
+                        <input id="setInterval" type="text" inputmode="decimal" value="1:30.0" placeholder="1:30.0">
+                    </label>
+                </div>
+                <details class="advanced-card">
+                    <summary>Set options <span>Pool, direction, strategy, audio</span></summary>
+                    <div class="form-card form-card-embedded">
+                        <label class="field field-wide"><span>Pool</span><select id="setPool"></select></label>
+                        <label class="field"><span>Start end</span><select id="setDirection"><option>Near</option><option>Far</option></select></label>
+                        <label class="field"><span>Audio</span><select id="setAudio"><option>Yes</option><option>No</option></select></label>
+                        <label class="field"><span>Strategy</span><select id="setStrategy"><option value="even">Even</option><option value="negative_split">Negative split</option><option value="surge">Surge</option></select></label>
+                        <label class="field"><span>Change / final target</span><input id="setVariation" type="text" inputmode="decimal" value="8"></label>
+                    </div>
+                </details>
+                <p id="formError" class="inline-error is-hidden" role="alert"></p>
+                <div class="action-stack">
+                    <button class="button button-primary" type="submit">Review set</button>
+                    <button id="saveSetButton" class="button button-secondary" type="button">Save set</button>
+                </div>
+            </form>
+        </section>
 
-        <button id="nwReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Return</button>
-        <textarea id="nwjsonTextarea" rows="10" cols="50" style="margin: 0 auto;">loading...</textarea>
-        <button onclick="fetchAndLoadJSON('nwjsonTextarea','/db/wifi.json')" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Reload</button>
-        <button onclick="submitJSON('nwjsonTextarea','/db/wifi.json')" class="button-prep2 pure-button" style="display: block; margin: 4px auto;">Submit</button>
-    </div>
+        <section id="deckScreen" class="screen deck-screen" aria-labelledby="deckTitle">
+            <div id="deckState" class="deck-state">Ready</div>
+            <p id="deckSetName" class="deck-set-name">Selected set</p>
+            <div class="rep-display">
+                <span>REP</span>
+                <strong><b id="currentRep">1</b><i>of</i><b id="totalReps">—</b></strong>
+            </div>
+            <div class="countdown-panel">
+                <span id="countdownLabel">Ready to start</span>
+                <strong id="countdownValue">—:—</strong>
+            </div>
+            <p id="deckMessage" class="deck-message">Timing and LEDs are prepared.</p>
+            <div class="deck-actions">
+                <button id="deckPrimaryButton" class="button deck-primary is-start" type="button">Start</button>
+                <button id="deckMenuButton" class="button button-quiet" type="button">Main menu</button>
+            </div>
+        </section>
 
-    <div id="mainmenu" style="display:block">
-        <nav>
-            <ul>
-                <li><button onclick="showdiv('paceset')" class="button-prep2 pure-button">Pace Set</button></li>
-                <li><button onclick="showdiv('sprintset')" class="button-prep2 pure-button">Sprint Set</button></li>
-                <li><button onclick="showdiv('poolmanagement')" class="button-prep2 pure-button">Pool Management</button></li>
-                <li><button onclick="showdiv('networkmanagement')" class="button-prep2 pure-button">Network Management</button></li>
-                <li><button onclick="showdiv('ledcontrols')" class="button-prep2 pure-button">Led Controls</button></li>
-                <li><button onclick="callApi('/HardReset')" class="button-prep2 pure-button">Hard Reset</button></li>
-                <!-- Add more buttons as needed -->
-            </ul>
-        </nav>
-    </div>
-    
-<div id="paceset" style="display:none">
-    <button id="ReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Return</button>
-    <button  id="CancelButton" onclick="CancelIt()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Cancel</button>
-    <button  id="StopButton" onclick="StopIt()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Stop</button>
-    <div id="paceStatus" style="display:none; text-align:center; margin: 8px auto;">Status: Idle</div>
+        <section id="toolsScreen" class="screen" aria-labelledby="toolsTitle">
+            <div class="hero hero-compact"><p class="eyebrow">System</p><h1 id="toolsTitle">Deck tools</h1><p class="supporting">Setup and maintenance controls.</p></div>
+            <div class="theme-card">
+                <span>Appearance</span>
+                <div class="theme-picker" role="group" aria-label="Appearance">
+                    <button data-theme-choice="dark" type="button">Dark</button>
+                    <button data-theme-choice="light" type="button">Light</button>
+                    <button data-theme-choice="system" type="button">System</button>
+                </div>
+            </div>
+            <div class="tool-list">
+                <button data-tool="pool" class="tool-row"><span>Pool settings<small>Default pool and geometry</small></span><b>›</b></button>
+                <button data-tool="network" class="tool-row"><span>Network settings<small>Wi-Fi profiles</small></span><b>›</b></button>
+                <button data-tool="led" class="tool-row"><span>LED controls<small>Test strand and markers</small></span><b>›</b></button>
+                <button id="emulatorLink" class="tool-row is-hidden"><span>Emulator view<small>Live pool visualization</small></span><b>›</b></button>
+                <button id="resetButton" class="tool-row tool-danger"><span>Restart controller<small>Interrupts the current session</small></span><b>›</b></button>
+            </div>
+        </section>
 
+        <section id="jsonScreen" class="screen" aria-labelledby="jsonTitle">
+            <div class="hero hero-compact"><p class="eyebrow">Advanced settings</p><h1 id="jsonTitle">Configuration</h1></div>
+            <textarea id="jsonEditor" class="json-editor" spellcheck="false"></textarea>
+            <p id="jsonMessage" class="inline-message"></p>
+            <button id="saveJsonButton" class="button button-primary" type="button">Save configuration</button>
+        </section>
 
-    <table id="tableofinputs"  style=" margin: 0 auto;">
-        <tr>
-            <th class="left-aligned-label"><label for="pools" >Pool</label></th>
-            <th><select id="pools" class="selection"></select></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="direction">Start (Near/Far)</label></th>
-            <th> <select id="direction" class="selection">
-                         <option value="Near">Near</option>
-                         <option value="Far">Far</option>
-                    </select></th>
-        </tr>
+        <section id="ledScreen" class="screen" aria-labelledby="ledTitle">
+            <div class="hero hero-compact"><p class="eyebrow">Maintenance</p><h1 id="ledTitle">LED controls</h1></div>
+            <div class="tool-list">
+                <button data-api="/LightStrand" class="tool-row"><span>Light strand<small>Illuminate reference pixels</small></span><b>Run</b></button>
+                <button data-api="/LightSegment" class="tool-row"><span>Light next segment<small>Step through pool sections</small></span><b>Run</b></button>
+                <button data-api="/ignitemarkers" class="tool-row"><span>Show markers<small>Display segment boundaries</small></span><b>Run</b></button>
+                <button data-api="/ClearStrand" class="tool-row"><span>Clear strand<small>Turn all pixels off</small></span><b>Run</b></button>
+            </div>
+            <p id="ledMessage" class="inline-message"></p>
+        </section>
+    </main>
 
-        <tr>
-            <th class="left-aligned-label"><label for="audio" >Audio</label></th>
-            <th>    <select id="audio" class="selection">
-                         <option value="Yes">Yes</option>
-                         <option value="No">No</option>
-                    </select></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="duration">Duration hh:mm:ss.ss</label></th>
-            <th><input name="duration" id="duration" value="2:00.00" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="distance" >Distance</label></th>
-            <th><input name="distance" id="distance" value="200" class="text-entry"/></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="repetitions"  >Repetitions</label></th>
-            <th><input name="repetitions" id="repetitions" value="20" class="text-entry"/></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="interval" >Intervals hh:mm:ss.ss</label></th>
-            <th><input name="interval" id="interval" value="2:30.00" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="strategy">Pace Strategy</label></th>
-            <th><select id="strategy" class="selection">
-                         <option value="even">Even</option>
-                         <option value="negative_split">Negative Split</option>
-                         <option value="surge">Surge</option>
-                    </select></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="variation">Change % / Last Target</label></th>
-            <th><input name="variation" id="variation" value="8" class="text-entry"/></th>
-        </tr>
-    </table>
-
-    <div style="text-align:center; margin: 8px auto;">
-        <select id="savedSets" class="selection"></select>
-        <button onclick="LoadSavedSet('pace')" class="button-prep2 pure-button">Load Set</button>
-        <button onclick="SaveCurrentSet('pace')" class="button-prep2 pure-button">Save Set</button>
-    </div>
-    <button  id="PrepButton" onclick="PrepIt()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Prep Set</button>
-    <button  id="StartButton" onclick="StartIt()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Start Set</button>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </div>
-
-<div id="sprintset" style="display:none">
-    <button id="ssReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Return</button>
-    <button  id="ssCancelButton" onclick="CancelSprint()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Cancel</button>
-    <button  id="ssStopButton" onclick="StopSprint()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Stop</button>
-    <div id="sprintStatus" style="display:none; text-align:center; margin: 8px auto;">Status: Idle</div>
-
-    <table id="sstableofinputs" style=" margin: 0 auto;">
-        <tr>
-            <th class="left-aligned-label"><label for="pools" >Pool</label></th>
-            <th><select id="sspools" class="selection"></select></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="direction">Start (Near/Far)</label></th>
-            <th> <select id="ssdirection" class="selection">
-                         <option value="Near">Near</option>
-                         <option value="Far">Far</option>
-                    </select></th>
-        </tr>
-
-        <tr>
-            <th class="left-aligned-label"><label for="audio" >Audio</label></th>
-            <th>    <select id="ssaudio" class="selection">
-                         <option value="Yes">Yes</option>
-                         <option value="No">No</option>
-                    </select></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="duration">Duration hh:mm:ss.ss</label></th>
-            <th><input name="duration" id="ssduration" value="0:10.0" type="text" onblur="validateTimeFormat(this)" class="text-entry"/></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="ssstrategy">Pace Strategy</label></th>
-            <th><select id="ssstrategy" class="selection">
-                         <option value="even">Even</option>
-                         <option value="negative_split">Negative Split</option>
-                         <option value="surge">Surge</option>
-                    </select></th>
-        </tr>
-        <tr>
-            <th class="left-aligned-label"><label for="ssvariation">Change % / Last Target</label></th>
-            <th><input name="variation" id="ssvariation" value="8" class="text-entry"/></th>
-        </tr>
-    </table>
- 
-    <label for="interval"></label><input name="interval" id="ssinterval" value="00.00" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
-    <label for="distance"></label><input name="distance" id="ssdistance" value="25" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
-    <label for="repetitions"></label><input name="repetitions" id="ssrepetitions" value="25" type="text" onblur="validateTimeFormat(this)" class="text-entry" style="display: none;"/>
-
-    <div style="text-align:center; margin: 8px auto;">
-        <select id="sssavedSets" class="selection"></select>
-        <button onclick="LoadSavedSet('sprint')" class="button-prep2 pure-button">Load Set</button>
-        <button onclick="SaveCurrentSet('sprint')" class="button-prep2 pure-button">Save Set</button>
-    </div>
-    <button  id="ssPrepButton" onclick="PrepSprint()" class="button-prep2 pure-button" style="display: block; margin: 0 auto;">Prep Set</button>
-    <button  id="ssStartButton" onclick="StartSprint()" class="button-prep2 pure-button" style="display: none; margin: 0 auto;">Start Set</button>
-
-</div>
-
-<div id="ledcontrols" style="display:none">
-        <nav>
-            <ul>
-                <li><button onclick="goBack()" class="button-prep2 pure-button">Return</button></li>
-                <li><button onclick="callApi('/LightStrand')" class="button-prep2 pure-button">Light the Strand</button></li>
-                <li><button onclick="callApi('/LightSegment')" class="button-prep2 pure-button">Light the Segment</button></li>
-                <li><button onclick="showdiv('controlapixel')" class="button-prep2 pure-button">Control a Pixel</button></li>
-                <li><button onclick="callApi('/ClearStrand')" class="button-prep2 pure-button">Clear the Strand</button></li>
-            </ul>
-        </nav>
-</div>
-
-<div id="controlapixel" style="display:none; text-align: center;">
-    <button id="cpReturnButton" onclick="goBack()" class="button-prep2 pure-button" style="display: inline-block">Return</button>
-    <br>
-    <label>Increment</label><br>
-    <label for="ledlocationslide"></label><input type="range" id="ledlocationslide" name="ledlocation" min="0" max="910" value="0"
-                                                 onchange="ledlocationchange(this)" style="width:100%"><br>
-    <label for="ledlocationtext"></label><input type="number" step="1" pattern="\d+" id="ledlocationtext" name="fname" value="0"
-                                                onchange="ledlocationchange(this)"><br>
-
-    <button id="plus" onclick="adjustLedLocation(1)" class="button-prep2 pure-button" >+</button>
-    <button id="minux" onclick="adjustLedLocation(-1)" class="button-prep2 pure-button" >-</button>
-
-    <button id="setlastled" onclick="saveaslastled()" class="button-prep2 pure-button" >Set as last LED</button>
-</div>
-
+<script src="js/navigation.js"></script>
 </body>
 </html>

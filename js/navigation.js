@@ -1,741 +1,442 @@
-// navigation.js
-const navLinks = document.querySelectorAll('nav a');
-const mainContent = document.querySelector('main');
+(function () {
+    'use strict';
 
-let returnDepth = 0;
-let currentDivId = document.getElementById('mainmenu')
-const previousContent = [];
+    const state = {
+        screen: 'home',
+        history: [],
+        sets: {},
+        pools: [],
+        defaultPool: '',
+        selectedName: '',
+        selectedSet: null,
+        server: null,
+        deckPhase: 'idle',
+        jsonPath: '',
+        poll: null,
+        busy: false,
+    };
 
-let pmjsontextarealoaded = 0;
-let nwjsonTextarealoaded =  0;
-const SET_STATUS_POLL_MS = 1000;
-let savedSetsCache = { sets: {} };
+    const $ = (id) => document.getElementById(id);
+    const screens = {
+        home: $('homeScreen'), review: $('reviewScreen'), editor: $('editorScreen'),
+        deck: $('deckScreen'), tools: $('toolsScreen'), json: $('jsonScreen'), led: $('ledScreen'),
+    };
 
-function buildPrepQuery(params) {
-    return `/prep?${new URLSearchParams(params).toString()}`;
-}
-
-function getRabbitToken() {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token') || localStorage.getItem('rabbitToken') || '';
-    if (token) {
-        localStorage.setItem('rabbitToken', token);
-    }
-    return token;
-}
-
-function rabbitUrl(path) {
-    const token = getRabbitToken();
-    if (!token) {
-        return path;
-    }
-    const url = new URL(path, window.location.origin);
-    url.searchParams.set('token', token);
-    return `${url.pathname}${url.search}`;
-}
-
-function timeToSeconds(value) {
-    const parts = value.split(':');
-    let hours = 0;
-    let minutes = 0;
-    let seconds = 0;
-
-    if (parts.length === 3) {
-        hours = Number(parts[0]);
-        minutes = Number(parts[1]);
-        seconds = Number(parts[2]);
-    } else if (parts.length === 2) {
-        minutes = Number(parts[0]);
-        seconds = Number(parts[1]);
-    } else {
-        seconds = Number(parts[0]);
+    function token() {
+        const queryToken = new URLSearchParams(location.search).get('token');
+        if (queryToken) localStorage.setItem('rabbitToken', queryToken);
+        return queryToken || localStorage.getItem('rabbitToken') || '';
     }
 
-    return (hours * 3600) + (minutes * 60) + seconds;
-}
-
-function secondsToTimeString(totalSeconds) {
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = (totalSeconds % 60).toFixed(2).padStart(5, '0');
-    return `${minutes}:${seconds}`;
-}
-
-function addSecondsToTimeString(value, secondsToAdd) {
-    return secondsToTimeString(timeToSeconds(value) + secondsToAdd);
-}
-
-function showdiv(newdiv) {
-    console.log(newdiv)
-    currentDivId.style.display = 'none';
-    previousContent[returnDepth++] = currentDivId;
-   
-    if (newdiv === "paceset") {
-        addValuesToPoolsSelect('pools');
-        LoadSavedSets();
-    } else if (newdiv === "sprintset") {
-        addValuesToPoolsSelect('sspools');
-        LoadSavedSets();
+    function url(path) {
+        const value = token();
+        if (!value) return path;
+        const target = new URL(path, location.origin);
+        target.searchParams.set('token', value);
+        return target.pathname + target.search;
     }
 
-    currentDivId = document.getElementById(newdiv);
-    currentDivId.style.display = 'block'
-    
-    if (newdiv === 'poolmanagement') {
-        console.log('show div here I am')
-        fetchAndLoadJSON('pmjsonTextarea','/db/pools.json');
-    } else if (newdiv === 'networkmanagement') {
-        console.log('show dive here I am')
-        fetchAndLoadJSON('nwjsonTextarea','/db/wifi.json')
+    async function request(path, options) {
+        const response = await fetch(url(path), Object.assign({ cache: 'no-store' }, options || {}));
+        const text = await response.text();
+        let data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (_) { data = { text: text }; }
+        if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+        return data;
     }
 
-    refreshVisibleSetStatus();
-}
-
-
-
-function goBack() {
-  currentDivId.style.display = 'none';
-  currentDivId = previousContent[--returnDepth]
-  currentDivId.style.display = 'block'
-}
-
-
-
-async function PrepSprint() {
-    const poolsValue = document.getElementById('sspools').value;
-    const directionValue = document.getElementById('ssdirection').value;
-    const audioValue = document.getElementById('ssaudio').value;
-    const durationValue = document.getElementById('ssduration').value;
-    const strategyValue = document.getElementById('ssstrategy').value;
-    const variationValue = document.getElementById('ssvariation').value;
-    const distanceValue = 25;
-    const repetitionsValue = 0;
-    const intervalValue = addSecondsToTimeString(durationValue, 5);
-
-    const concatenatedValues = buildPrepQuery({
-        pool: poolsValue,
-        direction: directionValue,
-        audio: audioValue,
-        duration: durationValue,
-        distance: distanceValue,
-        repetitions: repetitionsValue,
-        interval: intervalValue,
-        strategy: strategyValue,
-        variation: variationValue,
-        mode: 'sprint'
-    });
-    
-    console.log(concatenatedValues)
-
-    try {
-        await callApi(concatenatedValues);
-        document.getElementById('ssPrepButton').style.display = 'none';
-        document.getElementById('ssStartButton').style.display = 'block';
-        document.getElementById('ssCancelButton').style.display = 'block';
-        document.getElementById('ssReturnButton').style.display = 'none';
-        setInputsDisabled('sstableofinputs', true);
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-}
-
-async function PrepIt() {
-    const poolsValue = document.getElementById('pools').value;
-    const directionValue = document.getElementById('direction').value;
-    const audioValue = document.getElementById('audio').value;
-    const durationValue = document.getElementById('duration').value;
-    const distanceValue = document.getElementById('distance').value;
-    const repetitionsValue = document.getElementById('repetitions').value;
-    const intervalValue = document.getElementById('interval').value;
-    const strategyValue = document.getElementById('strategy').value;
-    const variationValue = document.getElementById('variation').value;
-
-    const concatenatedValues = buildPrepQuery({
-        pool: poolsValue,
-        direction: directionValue,
-        audio: audioValue,
-        duration: durationValue,
-        distance: distanceValue,
-        repetitions: repetitionsValue,
-        interval: intervalValue,
-        strategy: strategyValue,
-        variation: variationValue,
-        mode: 'pace'
-    });
-    
-
-    console.log(concatenatedValues)
-
-    try {
-        await callApi(concatenatedValues);
-        document.getElementById('PrepButton').style.display = 'none';
-        document.getElementById('StartButton').style.display = 'block';
-        document.getElementById('CancelButton').style.display = 'block';
-        document.getElementById('ReturnButton').style.display = 'none';
-        setInputsDisabled('tableofinputs', true);
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-}
-
-
-function toggleReadOnly(parm) {
-    const tableofinputs = document.getElementById(parm);
-    const inputs = tableofinputs.getElementsByTagName('input');
-    for (const element of inputs) {
-        element.disabled = !element.disabled; // Toggle the readOnly attribute
+    function show(screen, push) {
+        if (!screens[screen]) return;
+        if (push !== false && state.screen !== screen) state.history.push(state.screen);
+        Object.keys(screens).forEach((name) => screens[name].classList.toggle('is-active', name === screen));
+        state.screen = screen;
+        $('backButton').classList.toggle('is-hidden', screen === 'home' || screen === 'deck');
+        $('menuButton').classList.toggle('is-hidden', screen === 'deck');
+        window.scrollTo(0, 0);
     }
 
-    const selects = tableofinputs.getElementsByTagName('select');
-    console.log(selects)
-    for (const element of selects) {
-        element.disabled = !element.disabled; // Toggle the readOnly attribute
+    function goBack() {
+        show(state.history.pop() || 'home', false);
     }
 
-}
-
-function setInputsDisabled(parm, disabled) {
-    const tableofinputs = document.getElementById(parm);
-    const inputs = tableofinputs.getElementsByTagName('input');
-    for (const element of inputs) {
-        element.disabled = disabled;
+    function toast(message) {
+        const node = $('toast');
+        node.textContent = message;
+        node.classList.add('is-visible');
+        clearTimeout(toast.timer);
+        toast.timer = setTimeout(() => node.classList.remove('is-visible'), 2400);
     }
 
-    const selects = tableofinputs.getElementsByTagName('select');
-    for (const element of selects) {
-        element.disabled = disabled;
-    }
-}
-
-function setDisplay(id, display) {
-    document.getElementById(id).style.display = display;
-}
-
-function visibleSetPage() {
-    if (document.getElementById('paceset').style.display === 'block') {
-        return 'pace';
-    }
-    if (document.getElementById('sprintset').style.display === 'block') {
-        return 'sprint';
-    }
-    return null;
-}
-
-function setSetStatusText(id, status, pageMode) {
-    const statusNode = document.getElementById(id);
-    const modeLabel = status.mode === 'sprint' ? 'Sprint' : 'Pace';
-    const displayStatus = (status.displayLines || []).find(line => line.startsWith('Status:') || line.includes('Sprint'));
-    const details = status.setDetails || {};
-    const detailParts = [];
-
-    if (details.distance !== undefined && details.distance !== null) {
-        detailParts.push(`Distance: ${details.distance}`);
-    }
-    if (details.currentRep !== undefined && details.currentRep !== null) {
-        const totalReps = details.repetitions ? details.repetitions : '∞';
-        detailParts.push(`Rep: ${details.currentRep}/${totalReps}`);
-    }
-    if (details.targetDurationText) {
-        detailParts.push(`Target: ${details.targetDurationText}`);
-    }
-    if (
-        details.firstTargetDurationText
-        && details.lastTargetDurationText
-        && details.firstTargetDurationText !== details.lastTargetDurationText
-    ) {
-        detailParts.push(`First: ${details.firstTargetDurationText}`);
-        detailParts.push(`Last: ${details.lastTargetDurationText}`);
-    }
-    if (details.timeUntilNextRepText) {
-        detailParts.push(`Next rep: ${details.timeUntilNextRepText}`);
-    } else if (status.running && details.repetitions) {
-        detailParts.push('Next rep: none');
+    function applyTheme(choice) {
+        const selected = choice || localStorage.getItem('coachTheme') || 'dark';
+        const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const resolved = selected === 'dark' || (selected === 'system' && systemDark) ? 'dark' : 'light';
+        document.documentElement.dataset.theme = selected;
+        document.documentElement.dataset.resolvedTheme = resolved;
+        localStorage.setItem('coachTheme', selected);
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', resolved === 'dark' ? '#071a2b' : '#0878c9');
+        document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+            button.classList.toggle('is-selected', button.dataset.themeChoice === selected);
+            button.setAttribute('aria-pressed', button.dataset.themeChoice === selected ? 'true' : 'false');
+        });
     }
 
-    statusNode.style.display = 'block';
-    if (status.running) {
-        const baseStatus = displayStatus ? `${modeLabel} running - ${displayStatus}` : `${modeLabel} set running`;
-        statusNode.textContent = detailParts.length ? `${baseStatus} | ${detailParts.join(' | ')}` : baseStatus;
-    } else if (status.prepped && status.mode === pageMode) {
-        const baseStatus = `${modeLabel} set prepped`;
-        statusNode.textContent = detailParts.length ? `${baseStatus} | ${detailParts.join(' | ')}` : baseStatus;
-    } else if (status.prepped) {
-        const baseStatus = `${modeLabel} set prepped; switch to the ${modeLabel} page to start or cancel`;
-        statusNode.textContent = detailParts.length ? `${baseStatus} | ${detailParts.join(' | ')}` : baseStatus;
-    } else {
-        statusNode.textContent = 'Status: Idle';
-    }
-}
-
-function applyPaceControls(status) {
-    const matchingPrepped = status.prepped && status.mode === 'pace';
-    setSetStatusText('paceStatus', status, 'pace');
-    setInputsDisabled('tableofinputs', status.running || matchingPrepped);
-
-    setDisplay('ReturnButton', 'block');
-    setDisplay('PrepButton', (!status.running && !matchingPrepped) ? 'block' : 'none');
-    setDisplay('StartButton', (!status.running && matchingPrepped) ? 'block' : 'none');
-    setDisplay('CancelButton', (!status.running && matchingPrepped) ? 'block' : 'none');
-    setDisplay('StopButton', status.running ? 'block' : 'none');
-}
-
-function applySprintControls(status) {
-    const matchingPrepped = status.prepped && status.mode === 'sprint';
-    setSetStatusText('sprintStatus', status, 'sprint');
-    setInputsDisabled('sstableofinputs', status.running || matchingPrepped);
-
-    setDisplay('ssReturnButton', 'block');
-    setDisplay('ssPrepButton', (!status.running && !matchingPrepped) ? 'block' : 'none');
-    setDisplay('ssStartButton', (!status.running && matchingPrepped) ? 'block' : 'none');
-    setDisplay('ssCancelButton', (!status.running && matchingPrepped) ? 'block' : 'none');
-    setDisplay('ssStopButton', status.running ? 'block' : 'none');
-}
-
-async function refreshVisibleSetStatus() {
-    const page = visibleSetPage();
-    if (!page) {
-        return;
+    function setConnection(connected) {
+        document.querySelector('.app-header').classList.toggle('is-offline', !connected);
+        $('poolLabel').textContent = connected ? (state.defaultPool || 'No pool selected') : 'Controller unavailable';
     }
 
-    try {
-        const status = await callApi('/api/set-status');
-        if (page === 'pace') {
-            applyPaceControls(status);
-        } else if (page === 'sprint') {
-            applySprintControls(status);
+    function formatStrategy(value) {
+        return ({ even: 'Even pace', negative_split: 'Negative split', surge: 'Surge' })[value] || value;
+    }
+
+    function generatedName(set) {
+        if (set.mode === 'sprint') return `${set.duration} sprint`;
+        return `${set.repetitions} × ${set.distance} @ ${set.interval}`;
+    }
+
+    function describe(set) {
+        if (set.mode === 'sprint') return `${set.duration} target · ${formatStrategy(set.strategy)}`;
+        return `${set.repetitions} reps · ${set.distance} · ${set.duration} target`;
+    }
+
+    function renderSets() {
+        const list = $('setList');
+        const entries = Object.entries(state.sets);
+        list.innerHTML = '';
+        if (!entries.length) {
+            list.innerHTML = '<div class="empty-state">No saved sets yet.<br>Create one to get on deck.</div>';
+            return;
         }
-    } catch (error) {
-        const statusId = page === 'pace' ? 'paceStatus' : 'sprintStatus';
-        const statusNode = document.getElementById(statusId);
-        statusNode.style.display = 'block';
-        statusNode.textContent = `Status unavailable: ${error.message}`;
-    }
-}
-
-function savedSetSelectId(mode) {
-    return mode === 'sprint' ? 'sssavedSets' : 'savedSets';
-}
-
-function populateSavedSetSelect(mode) {
-    const select = document.getElementById(savedSetSelectId(mode));
-    if (!select) {
-        return;
+        entries.sort((a, b) => a[0].localeCompare(b[0])).forEach(([name, set]) => {
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'set-card';
+            card.innerHTML =
+                `<div class="set-card-top"><h3>${escapeHtml(name || generatedName(set))}</h3><span class="chevron">›</span></div>` +
+                `<p>${escapeHtml(describe(set))}</p>` +
+                `<div class="set-card-tags"><span class="tag">${set.mode === 'sprint' ? 'Sprint' : 'Pace'}</span>` +
+                `<span class="tag">${escapeHtml(set.direction || 'Near')} end</span>` +
+                `<span class="tag">${set.audio === 'No' ? 'Silent' : 'Audio'}</span></div>`;
+            card.addEventListener('click', () => selectSet(name, set));
+            list.appendChild(card);
+        });
     }
 
-    select.innerHTML = '';
-    const matchingSets = Object.entries(savedSetsCache.sets || {})
-        .filter(([, savedSet]) => savedSet.mode === mode)
-        .sort(([left], [right]) => left.localeCompare(right));
-
-    for (const [name] of matchingSets) {
-        const option = document.createElement('option');
-        option.value = name;
-        option.text = name;
-        select.appendChild(option);
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
-}
 
-async function LoadSavedSets() {
-    try {
-        const response = await fetch('/db/sets.json', { method: 'GET', cache: 'no-store' });
-        if (!response.ok) {
-            throw new Error(`Request failed: ${response.status}`);
-        }
-        savedSetsCache = await response.json();
-        populateSavedSetSelect('pace');
-        populateSavedSetSelect('sprint');
-    } catch (error) {
-        console.error('Error loading saved sets:', error);
+    function selectSet(name, set) {
+        state.selectedName = name || generatedName(set);
+        state.selectedSet = Object.assign({}, set);
+        renderReview();
+        show('review');
     }
-}
 
-function currentSetFromForm(mode) {
-    if (mode === 'sprint') {
-        const duration = document.getElementById('ssduration').value;
-        return {
-            mode: 'sprint',
-            pool: document.getElementById('sspools').value,
-            direction: document.getElementById('ssdirection').value,
-            audio: document.getElementById('ssaudio').value,
-            duration,
-            distance: 25,
-            repetitions: 0,
-            interval: addSecondsToTimeString(duration, 5),
-            strategy: document.getElementById('ssstrategy').value,
-            variation: document.getElementById('ssvariation').value,
+    function renderReview() {
+        const set = state.selectedSet;
+        if (!set) return;
+        $('reviewTitle').textContent = state.selectedName || generatedName(set);
+        $('reviewSummary').textContent = describe(set);
+        $('reviewReps').textContent = set.mode === 'sprint' ? 'Continuous' : set.repetitions;
+        $('reviewDistance').textContent = set.distance;
+        $('reviewInterval').textContent = set.interval;
+        $('reviewTarget').textContent = set.duration;
+        $('reviewStrategy').textContent = formatStrategy(set.strategy);
+        $('reviewDirection').textContent = `${set.direction || 'Near'} end`;
+        $('reviewAudio').textContent = set.audio === 'No' ? 'Off' : 'On';
+    }
+
+    function populateEditor(set, name) {
+        const value = set || {
+            mode: 'pace', pool: state.defaultPool, direction: 'Near', audio: 'Yes',
+            duration: '1:20.0', distance: 100, repetitions: 10, interval: '1:30.0',
+            strategy: 'even', variation: '8',
         };
+        $('editorTitle').textContent = set ? 'Edit set' : 'Create a set';
+        $('setName').value = name || '';
+        $('setMode').value = value.mode || 'pace';
+        $('setPool').value = value.pool || state.defaultPool;
+        $('setDirection').value = value.direction || 'Near';
+        $('setAudio').value = value.audio || 'Yes';
+        $('setDuration').value = value.duration || '';
+        $('setDistance').value = value.distance || 25;
+        $('setRepetitions').value = value.repetitions || 1;
+        $('setInterval').value = value.interval || '';
+        $('setStrategy').value = value.strategy || 'even';
+        $('setVariation').value = value.variation == null ? '8' : value.variation;
+        syncModeFields();
+        $('formError').classList.add('is-hidden');
     }
 
-    return {
-        mode: 'pace',
-        pool: document.getElementById('pools').value,
-        direction: document.getElementById('direction').value,
-        audio: document.getElementById('audio').value,
-        duration: document.getElementById('duration').value,
-        distance: Number(document.getElementById('distance').value),
-        repetitions: Number(document.getElementById('repetitions').value),
-        interval: document.getElementById('interval').value,
-        strategy: document.getElementById('strategy').value,
-        variation: document.getElementById('variation').value,
-    };
-}
-
-function applySavedSet(savedSet) {
-    if (savedSet.mode === 'sprint') {
-        document.getElementById('sspools').value = savedSet.pool;
-        document.getElementById('ssdirection').value = savedSet.direction;
-        document.getElementById('ssaudio').value = savedSet.audio;
-        document.getElementById('ssduration').value = savedSet.duration;
-        document.getElementById('ssstrategy').value = savedSet.strategy;
-        document.getElementById('ssvariation').value = savedSet.variation;
-        return;
-    }
-
-    document.getElementById('pools').value = savedSet.pool;
-    document.getElementById('direction').value = savedSet.direction;
-    document.getElementById('audio').value = savedSet.audio;
-    document.getElementById('duration').value = savedSet.duration;
-    document.getElementById('distance').value = savedSet.distance;
-    document.getElementById('repetitions').value = savedSet.repetitions;
-    document.getElementById('interval').value = savedSet.interval;
-    document.getElementById('strategy').value = savedSet.strategy;
-    document.getElementById('variation').value = savedSet.variation;
-}
-
-async function SaveCurrentSet(mode) {
-    const name = prompt('Saved set name');
-    if (!name || !name.trim()) {
-        return;
-    }
-
-    const normalizedName = name.trim();
-    const updatedSets = {
-        sets: {
-            ...(savedSetsCache.sets || {}),
-            [normalizedName]: currentSetFromForm(mode),
-        },
-    };
-
-    try {
-        const response = await fetch(rabbitUrl('/db/sets.json'), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(updatedSets),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error || `Request failed: ${response.status}`);
-        }
-        savedSetsCache = updatedSets;
-        populateSavedSetSelect(mode);
-        document.getElementById(savedSetSelectId(mode)).value = normalizedName;
-    } catch (error) {
-        alert(error.message);
-    }
-}
-
-function LoadSavedSet(mode) {
-    const select = document.getElementById(savedSetSelectId(mode));
-    const savedSet = savedSetsCache.sets ? savedSetsCache.sets[select.value] : null;
-    if (!savedSet) {
-        alert('No saved set selected.');
-        return;
-    }
-    applySavedSet(savedSet);
-}
-
-
-async function callApi(callme) {
-    const response = await fetch(rabbitUrl(callme), {
-        method: 'GET',
-    });
-    let data = {};
-    try {
-        data = await response.json();
-    } catch (error) {
-        data = {};
-    }
-    if (!response.ok) {
-        throw new Error(data.error || `Request failed: ${response.status}`);
-    }
-    console.log('Success:', data);
-    return data;
-}
-
-async function StartIt() {
-    try {
-        await callApi('/start');
-        document.getElementById('StartButton').style.display = 'none';
-        document.getElementById('ReturnButton').style.display = 'none';
-        document.getElementById('CancelButton').style.display = 'none';
-        document.getElementById('StopButton').style.display = 'block';
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-
-}
-
-async function CancelIt() {
-    try {
-        await callApi('/cancel-prep');
-        document.getElementById('StartButton').style.display = 'none';
-        document.getElementById('ReturnButton').style.display = 'block';
-        document.getElementById('CancelButton').style.display = 'none';
-        document.getElementById('PrepButton').style.display = 'block';
-        setInputsDisabled('tableofinputs', false);
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-}
-
-
-async function StopIt() {
-    try {
-        await callApi('/stop');
-        document.getElementById('CancelButton').style.display = 'block';
-        document.getElementById('StartButton').style.display = 'block';
-        document.getElementById('StopButton').style.display = 'none';
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-
-}
-
-
-async function StartSprint() {
-    try {
-        await callApi('/startsprint');
-        document.getElementById('ssStartButton').style.display = 'none';
-        document.getElementById('ssReturnButton').style.display = 'none';
-        document.getElementById('ssCancelButton').style.display = 'none';
-        document.getElementById('ssStopButton').style.display = 'block';
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-
-}
-
-async function CancelSprint() {
-    try {
-        await callApi('/cancel-prep');
-        document.getElementById('ssStartButton').style.display = 'none';
-        document.getElementById('ssReturnButton').style.display = 'block';
-        document.getElementById('ssCancelButton').style.display = 'none';
-        document.getElementById('ssPrepButton').style.display = 'block';
-        setInputsDisabled('sstableofinputs', false);
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-}
-
-async function StopSprint() {
-    try {
-        await callApi('/stop');
-        document.getElementById('ssCancelButton').style.display = 'block';
-        document.getElementById('ssStartButton').style.display = 'block';
-        document.getElementById('ssStopButton').style.display = 'none';
-        refreshVisibleSetStatus();
-    } catch (error) {
-        alert(error.message);
-    }
-
-}
-
-
-
-
-function test()  {
-    console.log(document.getElementById('main-content').innerHTML)
-}
-
-navLinks.forEach(link => {
-    link.addEventListener('click', function (e) {
-        e.preventDefault(); // Prevent default link behavior
-        const href = this.getAttribute('href');
-        loadPage(href);
-        history.pushState(null, '', href); // Update the URL
-    });
-});
-
-// Handle back/forward browser navigation
-window.addEventListener('popstate', function () {
-    const currentUrl = window.location.pathname;
-    loadPage(currentUrl);
-});
-
-function validateTimeFormat(input) {
-    const regex = /^(?:(?:([01]?[0-9]|2[0-3]):)?([0-5]?[0-9]):)?([0-5]?[0-9])\.(\d{1,3})$/;
-    if (!regex.test(input.value)) {
-        alert("Invalid time format. Please use [HH:]mm:ss.sss format.");
-        //input.value = ""; // Clear the input field
-    }
-}
-
-
-const poolsSelect = document.createElement('select');
-poolsSelect.style.visibility='hidden';
-document.body.appendChild(poolsSelect);
-FetchPools()
-LoadSavedSets()
-window.setInterval(refreshVisibleSetStatus, SET_STATUS_POLL_MS);
-
-function FetchPools() {
-    poolsSelect.innerHTML = ''
-    fetch('/db/pools.json', {method: 'GET'})
-         .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log(data)
-            for (const schoolName in data.pools) {
-            
-            console.log(data.pools)
-              if (data.pools.hasOwnProperty(schoolName)) {
-                  const option = document.createElement("option");
-                  option.text = schoolName;
-                  console.log("Appending:")
-                  console.log(schoolName)
-                  if (schoolName === data.defaultPool) {
-                        option.selected = true;
-                        console.log("selected")
-                    }
-                poolsSelect.appendChild(option);
-              }
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching JSON:', error);
-        });
-    }
-    function addValuesToPoolsSelect(poolelement) {
-        console.log('addValuesToPoolsSelect() called');
-        // Get the "pools" select element by its ID
-
-        const pSelect = document.getElementById(poolelement);
-        pSelect.innerHTML = ""
-        console.log(pSelect)
- 
-        // Iterate through the values and add them to the select element
-        for (const option of poolsSelect.options) {
-            const clonedOption = option.cloneNode(true);
-            clonedOption.selected = option.selected;
-            pSelect.appendChild(clonedOption);
-        }
-    }
-
-    // Call the function to add values to the "pools" select element
-function fetchAndLoadJSON(textareaId, jsonFilename) {
-    console.log("Fetch in",textareaId, pmjsontextarealoaded, nwjsonTextarealoaded)
-    fetch(jsonFilename, { method: 'GET' })
-        .then(response => response.json())
-        .then(data => {
-            const jsonTextarea = document.getElementById(textareaId);
-            console.log(jsonTextarea)
-            jsonTextarea.value = JSON.stringify(data, null, 2);
-            if (textareaId === 'pmjsonTextarea') {
-                pmjsontextarealoaded = 1
-            } else 
-                if (textareaId === 'nwjsonTextarea') {
-                    nwjsonTextarealoaded = 1
-                }
-                console.log("Fetch out",textareaId, pmjsontextarealoaded, nwjsonTextarealoaded)
-        })
-        .catch(error => console.error('Error fetching JSON:', error));
-}
- 
-    // Function to submit the edited JSON
-    function submitJSON(textareaId,filename) {
-        console.log("get in", textareaId, pmjsontextarealoaded, nwjsonTextarealoaded)
-        if (textareaId === 'pmjsonTextarea') {
-            if (pmjsontextarealoaded === 0) {
-                alert("Data has not been loaded yet.")
-                return
-            }
-        } else 
-            if (textareaId === 'nwjsonTextarea') {
-                if (nwjsonTextarealoaded === 0) {
-                    alert("Data has not been loaded yet.")
-                    return
-                }
-            }  
-       
-        console.log('submitting')
-        const editedJSON = document.getElementById(textareaId).value;
-
-        // Parse the edited JSON
-        try {
-            const parsedJSON = JSON.parse(editedJSON);
-            // You can send the parsedJSON to your server for processing here
-            console.log('Edited JSON:', parsedJSON);
-
-            // Example: Send the edited JSON to a server using fetch
-            
-            fetch(rabbitUrl(filename), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(parsedJSON),
-            })
-            .then(response => response.json().then(data => {
-                if (!response.ok) {
-                    throw new Error(data.error || `Request failed: ${response.status}`);
-                }
-                return data;
-            }))
-            .then(data => {
-                console.log('Server response:', data);
-            })
-            .catch(error => alert('Error submitting JSON: ' + error));
-           
-            
-        } catch (error) {
-            console.error('Error parsing JSON:', error);
-        }
-    }
-
-    // Function to submit the edited JSON
-    async function saveaslastled() {
-        siblingobj = document.getElementById('ledlocationtext');
-        try {
-            await callApi("/saveaslastled/" + siblingobj.value);
-        } catch (error) {
-            alert(error.message);
-        }
-    }
-
-    async function ledlocationchange(obj) {
-        console.log(obj.type)
-        var siblingobj;
-        if (obj.type == "range") {
-            siblingobj = document.getElementById('ledlocationtext');
+    function syncModeFields() {
+        const sprint = $('setMode').value === 'sprint';
+        $('setRepetitions').disabled = sprint;
+        $('setDistance').disabled = sprint;
+        if (sprint) {
+            $('setRepetitions').value = 0;
+            $('setDistance').value = 25;
         } else {
-            siblingobj = document.getElementById('ledlocationslide');
-        }
-        siblingobj.value = obj.value
-        try {
-            await callApi("/IgniteLedLoc/" + obj.value);
-        } catch (error) {
-            alert(error.message);
+            if (Number($('setRepetitions').value) < 1) $('setRepetitions').value = 10;
         }
     }
 
-    function adjustLedLocation(increment) {
-      var siblingobj = document.getElementById('ledlocationtext');
-      var currentValue = parseInt(siblingobj.value, 10); // Parse the current value as an integer
-      var newValue = currentValue + increment; // Add or subtract based on the 'increment' parameter
-      siblingobj.value = newValue; // Update the element's value
-      ledlocationchange(siblingobj)
-}
+    function setFromForm() {
+        const sprint = $('setMode').value === 'sprint';
+        const set = {
+            mode: sprint ? 'sprint' : 'pace',
+            pool: $('setPool').value,
+            direction: $('setDirection').value,
+            audio: $('setAudio').value,
+            duration: $('setDuration').value.trim(),
+            distance: sprint ? 25 : Number($('setDistance').value),
+            repetitions: sprint ? 0 : Number($('setRepetitions').value),
+            interval: $('setInterval').value.trim(),
+            strategy: $('setStrategy').value,
+            variation: $('setVariation').value.trim(),
+        };
+        if (!set.pool) throw new Error('Choose a pool.');
+        if (!set.duration || !set.interval) throw new Error('Enter target time and send-off.');
+        if (!sprint && (!set.distance || !set.repetitions)) throw new Error('Distance and repetitions must be greater than zero.');
+        return set;
+    }
+
+    async function saveSet() {
+        try {
+            const set = setFromForm();
+            const customName = $('setName').value.trim();
+            const name = customName || generatedName(set);
+            state.sets[name] = set;
+            await request('/db/sets.json', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sets: state.sets }),
+            });
+            renderSets();
+            toast(`Saved “${name}”`);
+            selectSet(name, set);
+        } catch (error) { showFormError(error.message); }
+    }
+
+    function showFormError(message) {
+        $('formError').textContent = message;
+        $('formError').classList.remove('is-hidden');
+    }
+
+    function prepPath(set) {
+        const params = new URLSearchParams(set);
+        return `/prep?${params.toString()}`;
+    }
+
+    async function prepare() {
+        if (!state.selectedSet || state.busy) return;
+        setBusy($('prepareButton'), true, 'Preparing…');
+        try {
+            await request(prepPath(state.selectedSet));
+            state.deckPhase = 'prepared';
+            updateDeck({ running: false, prepped: true, mode: state.selectedSet.mode, setDetails: {
+                currentRep: 1, repetitions: state.selectedSet.repetitions,
+                timeUntilNextRepText: null,
+            }});
+            state.history = [];
+            show('deck', false);
+        } catch (error) {
+            toast(error.message);
+        } finally { setBusy($('prepareButton'), false, 'Prepare set'); }
+    }
+
+    function setBusy(button, busy, label) {
+        state.busy = busy;
+        button.disabled = busy;
+        const span = button.querySelector('span');
+        if (span) span.textContent = label; else button.textContent = label;
+    }
+
+    function updateDeck(status) {
+        if (!status) return;
+        state.server = status;
+        const details = status.setDetails || {};
+        const total = details.repetitions || (state.selectedSet && state.selectedSet.repetitions) || '∞';
+        const current = details.currentRep || 1;
+        $('deckSetName').textContent = state.selectedName || (state.selectedSet ? generatedName(state.selectedSet) : 'Current set');
+        $('currentRep').textContent = current;
+        $('totalReps').textContent = total || '∞';
+
+        const primary = $('deckPrimaryButton');
+        primary.classList.remove('is-start', 'is-stop');
+        if (status.running) {
+            state.deckPhase = 'running';
+            $('deckState').textContent = 'Running';
+            $('countdownLabel').textContent = 'Next start';
+            $('countdownValue').textContent = details.timeUntilNextRepText || '—:—';
+            $('deckMessage').textContent = 'Stop ends this rep and queues the next one.';
+            primary.textContent = 'Stop';
+            primary.classList.add('is-stop');
+        } else if (status.complete) {
+            state.deckPhase = 'complete';
+            $('deckState').textContent = 'Complete';
+            $('countdownLabel').textContent = 'Set finished';
+            $('countdownValue').textContent = 'DONE';
+            $('deckMessage').textContent = 'Nice work. Run it again or choose another set.';
+            primary.textContent = 'Run again';
+            primary.classList.add('is-start');
+        } else if (status.prepped) {
+            state.deckPhase = current > 1 ? 'paused' : 'prepared';
+            $('deckState').textContent = current > 1 ? 'Paused' : 'Ready';
+            $('countdownLabel').textContent = current > 1 ? 'Next up' : 'Ready to start';
+            $('countdownValue').textContent = current > 1 ? `REP ${current}` : '—:—';
+            $('deckMessage').textContent = current > 1 ? `Rep ${current - 1} ended. Continue when the lane is ready.` : 'Timing and LEDs are prepared.';
+            primary.textContent = current > 1 ? 'Continue' : 'Start';
+            primary.classList.add('is-start');
+        } else {
+            state.deckPhase = 'idle';
+        }
+    }
+
+    async function deckPrimary() {
+        if (state.busy) return;
+        const button = $('deckPrimaryButton');
+        state.busy = true;
+        button.disabled = true;
+        try {
+            if (state.deckPhase === 'running') {
+                await request('/stop');
+                await refreshStatus();
+            } else if (state.deckPhase === 'complete') {
+                await prepare();
+            } else {
+                await request(state.selectedSet && state.selectedSet.mode === 'sprint' ? '/startsprint' : '/start');
+                await refreshStatus();
+            }
+        } catch (error) { toast(error.message); }
+        finally { state.busy = false; button.disabled = false; }
+    }
+
+    async function refreshStatus() {
+        try {
+            const status = await request('/api/set-status');
+            setConnection(true);
+            state.server = status;
+            if (state.screen === 'deck') updateDeck(status);
+            const resumable = status.prepped || status.running;
+            $('resumeCard').classList.toggle('is-hidden', !resumable);
+            if (resumable) {
+                const details = status.setDetails || {};
+                $('resumeTitle').textContent = status.running ? 'Set running' : 'Set ready';
+                $('resumeMeta').textContent = `Rep ${details.currentRep || 1} of ${details.repetitions || '∞'}`;
+                $('resumeButton').textContent = status.running ? 'View' : 'Return';
+            }
+        } catch (_) {
+            setConnection(false);
+        }
+    }
+
+    async function mainMenu() {
+        show('home', false);
+    }
+
+    async function openJson(kind) {
+        state.jsonPath = kind === 'pool' ? '/db/pools.json' : '/db/wifi.json';
+        $('jsonTitle').textContent = kind === 'pool' ? 'Pool settings' : 'Network settings';
+        $('jsonMessage').textContent = 'Loading…';
+        show('json');
+        try {
+            const data = await request(state.jsonPath);
+            $('jsonEditor').value = JSON.stringify(data, null, 2);
+            $('jsonMessage').textContent = '';
+        } catch (error) { $('jsonMessage').textContent = error.message; }
+    }
+
+    async function saveJson() {
+        try {
+            const data = JSON.parse($('jsonEditor').value);
+            await request(state.jsonPath, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+            });
+            $('jsonMessage').textContent = 'Saved successfully.';
+            if (state.jsonPath.indexOf('pools') >= 0) await loadData();
+        } catch (error) { $('jsonMessage').textContent = error.message; }
+    }
+
+    async function loadData() {
+        const [poolData, setData] = await Promise.all([request('/db/pools.json'), request('/db/sets.json')]);
+        state.defaultPool = poolData.defaultPool || '';
+        state.pools = Object.keys(poolData.pools || {});
+        state.sets = setData.sets || {};
+        $('poolLabel').textContent = state.defaultPool || 'No pool selected';
+        $('setPool').innerHTML = state.pools.map((name) => `<option${name === state.defaultPool ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
+        renderSets();
+    }
+
+    function bind() {
+        document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+            button.addEventListener('click', () => applyTheme(button.dataset.themeChoice));
+        });
+        $('backButton').addEventListener('click', goBack);
+        $('menuButton').addEventListener('click', () => show('tools'));
+        $('newSetButton').addEventListener('click', () => { populateEditor(); show('editor'); });
+        $('editSetButton').addEventListener('click', () => { populateEditor(state.selectedSet, state.selectedName); show('editor'); });
+        $('prepareButton').addEventListener('click', prepare);
+        $('setMode').addEventListener('change', syncModeFields);
+        $('setForm').addEventListener('submit', (event) => {
+            event.preventDefault();
+            try {
+                const set = setFromForm();
+                state.selectedSet = set;
+                state.selectedName = $('setName').value.trim() || generatedName(set);
+                renderReview();
+                show('review');
+            } catch (error) { showFormError(error.message); }
+        });
+        $('saveSetButton').addEventListener('click', saveSet);
+        $('deckPrimaryButton').addEventListener('click', deckPrimary);
+        $('deckMenuButton').addEventListener('click', mainMenu);
+        $('resumeButton').addEventListener('click', () => {
+            if (state.server && !state.selectedSet) {
+                const details = state.server.setDetails || {};
+                state.selectedSet = { mode: state.server.mode || 'pace', repetitions: details.repetitions || 0 };
+                state.selectedName = 'Current set';
+            }
+            updateDeck(state.server);
+            show('deck', false);
+        });
+        document.querySelectorAll('[data-tool]').forEach((button) => button.addEventListener('click', () => {
+            const tool = button.dataset.tool;
+            if (tool === 'led') show('led'); else openJson(tool);
+        }));
+        document.querySelectorAll('[data-api]').forEach((button) => button.addEventListener('click', async () => {
+            try { await request(button.dataset.api); $('ledMessage').textContent = 'Command completed.'; }
+            catch (error) { $('ledMessage').textContent = error.message; }
+        }));
+        $('saveJsonButton').addEventListener('click', saveJson);
+        $('resetButton').addEventListener('click', async () => {
+            if (!confirm('Restart the controller? This interrupts the current session.')) return;
+            try { await request('/HardReset'); toast('Controller restarting'); } catch (error) { toast(error.message); }
+        });
+        if (location.port === '5000') {
+            $('emulatorLink').classList.remove('is-hidden');
+            $('emulatorLink').addEventListener('click', () => { location.href = '/emulator'; });
+        }
+    }
+
+    async function init() {
+        bind();
+        applyTheme(document.documentElement.dataset.theme || 'dark');
+        if (window.matchMedia) {
+            const media = window.matchMedia('(prefers-color-scheme: dark)');
+            if (media.addEventListener) {
+                media.addEventListener('change', () => {
+                    if (document.documentElement.dataset.theme === 'system') applyTheme('system');
+                });
+            }
+        }
+        try { await loadData(); }
+        catch (error) { $('setList').innerHTML = `<div class="empty-state">Could not load sets.<br>${escapeHtml(error.message)}</div>`; }
+        await refreshStatus();
+        state.poll = setInterval(refreshStatus, 1000);
+    }
+
+    init();
+}());

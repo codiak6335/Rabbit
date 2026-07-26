@@ -90,6 +90,10 @@ def main():
             raise AssertionError('emulator reported no pixels')
         if 'flatProgress' not in initial_state:
             raise AssertionError('emulator state did not include flat-water progress')
+        with urllib.request.urlopen(BASE_URL + '/', timeout=5) as response:
+            index_body = response.read().decode()
+        if '<title>Coach On Deck</title>' not in index_body or 'Choose today’s set' not in index_body:
+            raise AssertionError('Coach On Deck mobile UI was not served')
         set_status = get_json('/api/set-status')
         if set_status['running'] or set_status['prepped']:
             raise AssertionError('fresh emulator should not report a running or prepped set')
@@ -180,6 +184,19 @@ def main():
         set_status = get_json('/api/set-status')
         if set_status['running'] or not set_status['prepped'] or set_status['mode'] != 'pace':
             raise AssertionError(f'stop should preserve the prepared pace set: {set_status}')
+        details = set_status.get('setDetails') or {}
+        if details.get('currentRep') != 2 or set_status.get('complete'):
+            raise AssertionError(f'stop should pause and advance to rep 2: {set_status}')
+
+        get_json('/start')
+        time.sleep(0.2)
+        resumed_status = get_json('/api/set-status')
+        if not resumed_status['running'] or (resumed_status.get('setDetails') or {}).get('currentRep') != 2:
+            raise AssertionError(f'continue should resume at rep 2: {resumed_status}')
+        get_json('/stop')
+        completed_status = get_json('/api/set-status')
+        if completed_status['running'] or not completed_status.get('complete'):
+            raise AssertionError(f'stopping the final rep should complete the set: {completed_status}')
         get_json('/cancel-prep')
         set_status = get_json('/api/set-status')
         if set_status['running'] or set_status['prepped'] or set_status['mode'] is not None:

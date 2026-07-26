@@ -226,6 +226,7 @@ class SwimSet:
         self.beep_lead_ms = 0
         self.next_rep_start_ms = None
         self.in_rep = False
+        self.rep_interrupted = False
         self.lastPixel = None
         self.display = display
         self.Direction = True
@@ -394,6 +395,10 @@ class SwimSet:
     def set_bottom_times(self, duration=120, distance=200, interval=180, repetitions=20, length=25, direction=True,
                          pool='Bellevue East', strategy='even', variation=0.08, last_duration=None):
         self.ltime = 0
+        self.completed_reps = 0
+        self.next_rep_start_ms = None
+        self.in_rep = False
+        self.rep_interrupted = False
         if direction:
             print("Near")
         else:
@@ -555,6 +560,7 @@ class SwimSet:
 
     def rep(self, threeBeeps=True):
         self.PipOn = True
+        self.rep_interrupted = False
 
         self.maxtimeindex = self.highestLed
         self.currentPixel = self.lowestLed
@@ -605,6 +611,7 @@ class SwimSet:
             self.update_set_display()
 
         self.lastRepEnd = time.ticks_ms()
+        self.rep_interrupted = not self.RunningMode
         self.in_rep = False
         self.LedStrand.clear_strand()
 
@@ -612,8 +619,7 @@ class SwimSet:
         self.Stopped = False
         self.RunningMode = True
         self.lastPixel = -1
-        reps = 0
-        self.completed_reps = 0
+        reps = int(self.completed_reps or 0)
         try:
             while self.RunningMode and (self.repetitions == 0 or reps < self.repetitions):
                 self.completed_reps = reps
@@ -645,6 +651,9 @@ class SwimSet:
                             print(f'Resting Interval : {rest_interval}')
                             self.update_set_display(force=True)
                             self.sleep_until_next_beep(next_start_ms)
+                elif self.rep_interrupted:
+                    reps += 1
+                    self.completed_reps = reps
         finally:
             self.RunningMode = False
             self.Stopped = True
@@ -661,8 +670,7 @@ class SwimSet:
         self.Stopped = False
         self.RunningMode = True
         self.lastPixel = -1
-        reps = 0
-        self.completed_reps = 0
+        reps = int(self.completed_reps or 0)
         direction = self.Direction
         try:
             while self.RunningMode:
@@ -680,6 +688,9 @@ class SwimSet:
                     print(f'{self.interval}, {elapsed_time}')
 
                     print(f'{reps} repetitions completed.')
+                elif self.rep_interrupted:
+                    reps += 1
+                    self.completed_reps = reps
         finally:
             self.RunningMode = False
             self.Stopped = True

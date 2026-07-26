@@ -649,10 +649,12 @@ def set_status(request):
     except Exception:
         display_lines = []
 
+    is_complete = bool(ss.repetitions and ss.completed_reps >= ss.repetitions)
     return json_response({
         'running': bool(ss.RunningMode),
         'stopped': bool(ss.Stopped),
         'prepped': bool(ss.length_plan_ms),
+        'complete': is_complete,
         'mode': active_set_mode,
         'displayLines': display_lines,
         'setDetails': set_details() if ss.length_plan_ms else None,
@@ -875,6 +877,10 @@ def cancel_prep(request):
     ss.length_index = 0
     ss.current_length_ms = 0
     ss.startTimeOfThisLength = None
+    ss.completed_reps = 0
+    ss.next_rep_start_ms = None
+    ss.in_rep = False
+    ss.rep_interrupted = False
     active_set_mode = None
     return json_response({'msg': 'Canceled'})
 
