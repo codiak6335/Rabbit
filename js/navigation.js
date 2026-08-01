@@ -13,6 +13,7 @@
         deckPhase: 'idle',
         jsonPath: '',
         poll: null,
+        statusBusy: false,
         busy: false,
         workoutModel: null,
         workoutPlan: null,
@@ -572,7 +573,9 @@ repeat until stopped {
         $('totalReps').textContent = total || '∞';
 
         const primary = $('deckPrimaryButton');
+        const cancel = $('deckCancelButton');
         primary.classList.remove('is-start', 'is-stop');
+        cancel.classList.toggle('is-hidden', !status.prepped || status.running || status.complete);
         if (status.running) {
             state.deckPhase = 'running';
             $('deckState').textContent = entry && entry.kind !== 'swim' ? entry.kind : 'Running';
@@ -647,9 +650,29 @@ repeat until stopped {
         finally { state.busy = false; button.disabled = false; }
     }
 
-    async function refreshStatus() {
+    async function cancelSet() {
+        if (state.busy) return;
+        const button = $('deckCancelButton');
+        state.busy = true;
+        button.disabled = true;
         try {
-            const status = await request('/api/set-status');
+            await request('/cancel-prep');
+            state.deckPhase = 'idle';
+            await refreshStatus();
+            renderReview();
+            show('review', false);
+            toast('Set canceled');
+        } catch (error) { toast(error.message); }
+        finally { state.busy = false; button.disabled = false; }
+    }
+
+    async function refreshStatus() {
+        if (state.statusBusy) return;
+        state.statusBusy = true;
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timeout = controller ? setTimeout(() => controller.abort(), 3500) : null;
+        try {
+            const status = await request('/api/set-status', controller ? { signal: controller.signal } : undefined);
             setConnection(true);
             state.server = status;
             if (state.screen === 'deck') updateDeck(status);
@@ -665,6 +688,9 @@ repeat until stopped {
             }
         } catch (_) {
             setConnection(false);
+        } finally {
+            if (timeout) clearTimeout(timeout);
+            state.statusBusy = false;
         }
     }
 
@@ -829,6 +855,7 @@ repeat until stopped {
             });
         });
         $('deckPrimaryButton').addEventListener('click', deckPrimary);
+        $('deckCancelButton').addEventListener('click', cancelSet);
         $('deckMenuButton').addEventListener('click', mainMenu);
         $('resumeButton').addEventListener('click', () => {
             if (state.server && !state.selectedSet) restoreSelectedSet(state.server);
@@ -870,7 +897,7 @@ repeat until stopped {
         try { await loadDeckScriptChatGptPrompt(); }
         catch (error) { $('copyDeckScriptPromptButton').title = error.message; }
         await refreshStatus();
-        state.poll = setInterval(refreshStatus, 1000);
+        state.poll = setInterval(refreshStatus, 2000);
     }
 
     init();

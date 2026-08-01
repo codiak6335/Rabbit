@@ -169,7 +169,7 @@ if not IS_EMULATOR and framebuf is not None:
 
 
 def get_display():
-    if IS_EMULATOR or framebuf is None:
+    if IS_EMULATOR or framebuf is None or ST7789 is None:
         display = EmulatedDisplay()
         print(display)
         return display

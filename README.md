@@ -37,4 +37,17 @@ Open the UI with `?token=change-me` once, or send `X-Rabbit-Token: change-me` fr
 
 ## Structured workouts
 
-Coach On Deck supports versioned DeckScript workouts alongside the original Pace and Sprint set paths. See [DeckScript 2](docs/deckscript.md) for timing semantics, nested rounds, progressions, negative splits, shorthand import, and the compact RP2040 execution format.
+Coach On Deck supports versioned DeckScript workouts alongside the original Pace and Sprint set paths. See [DeckScript 2](docs/deckscript.md) for timing semantics, nested rounds, progressions, negative splits, shorthand import, and the compact RP2 execution format.
+
+## RP2 compatibility check
+
+Before copying a new build to the controller, test its production imports
+against the connected MicroPython runtime:
+
+```bash
+python3 tools/smoke_rp2040.py --device /dev/ttyACM0
+```
+
+The check mounts the working tree without overwriting the controller, imports
+the production runtime modules, verifies device-mode path handling, and then
+reboots the existing on-device application.

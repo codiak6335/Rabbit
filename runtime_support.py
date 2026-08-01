@@ -1,13 +1,30 @@
 import os
-import threading
+import sys
 import time
 
+try:
+    import threading
+    allocate_lock = threading.Lock
+except ImportError:
+    import _thread
+    allocate_lock = _thread.allocate_lock
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IS_EMULATOR = os.getenv('RABBIT_EMULATOR', '').lower() in ('1', 'true', 'yes', 'on')
+
+IS_MICROPYTHON = sys.implementation.name == 'micropython'
+
+
+def get_env(name, default=''):
+    getter = getattr(os, 'getenv', None)
+    return getter(name, default) if getter is not None else default
+
+
+BASE_DIR = '' if IS_MICROPYTHON else os.path.dirname(os.path.abspath(__file__))
+IS_EMULATOR = get_env('RABBIT_EMULATOR', '').lower() in ('1', 'true', 'yes', 'on')
 
 
 def project_path(path):
+    if IS_MICROPYTHON:
+        return path
     return os.path.join(BASE_DIR, path.lstrip('/'))
 
 
@@ -22,7 +39,7 @@ def patch_time_module():
 
 class EmulatorState:
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = allocate_lock()
         self.strip = []
         self.display = []
         self.audio_events = []

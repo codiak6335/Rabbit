@@ -290,7 +290,7 @@ class SwimSet:
         return f'{minutes}:{remaining_seconds:04.1f}'
 
     def seconds_until_next_rep(self):
-        if not self.RunningMode or self.staticStartTime is None:
+        if not self.RunningMode:
             return None
         if self.repetitions and self.completed_reps >= self.repetitions:
             return None
@@ -301,6 +301,8 @@ class SwimSet:
             return max(0, time.ticks_diff(self.next_rep_start_ms, time.ticks_ms()) / timescale)
 
         target_seconds = self.current_rep_target_seconds if self.repetitions == 0 else self.interval
+        if self.staticStartTime is None:
+            return target_seconds
         return max(0, target_seconds - (time.ticks_diff(time.ticks_ms(), self.staticStartTime) / timescale))
 
     def current_target_duration_seconds(self):

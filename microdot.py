@@ -1100,10 +1100,9 @@ class Microdot():
             try:
                 sock, addr = self.server.accept()
             except OSError as exc:  # pragma: no cover
-                if exc.errno == errno.ECONNABORTED:
+                if self.shutdown_requested or getattr(self, '_rabbit_restart', False):
                     break
-                else:
-                    print_exception(exc)
+                print_exception(exc)
             except Exception as exc:  # pragma: no cover
                 print_exception(exc)
             else:

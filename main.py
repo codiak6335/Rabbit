@@ -1,4 +1,5 @@
 import _thread
+import gc
 import json
 import math
 import os
@@ -7,7 +8,16 @@ import sys
 
 import displays
 from microdot import Microdot, send_file
-from runtime_support import EMULATOR_STATE, IS_EMULATOR, get_machine_module, get_network_module, patch_time_module, project_path
+from runtime_support import (
+    EMULATOR_STATE,
+    IS_EMULATOR,
+    IS_MICROPYTHON,
+    get_env,
+    get_machine_module,
+    get_network_module,
+    patch_time_module,
+    project_path,
+)
 from swimset import SwimSet
 from workout_runner import WorkoutPlanError, WorkoutRunner
 
@@ -23,8 +33,15 @@ display = displays.get_display()
 ss = SwimSet(display, False)
 workout_runner = WorkoutRunner(ss)
 run_lock = _thread.allocate_lock()
-ADMIN_TOKEN = os.getenv('RABBIT_ADMIN_TOKEN', '')
+ADMIN_TOKEN = get_env('RABBIT_ADMIN_TOKEN', '')
 active_set_mode = None
+network_watchdog = {
+    'mode': None,
+    'ssid': None,
+    'password': None,
+    'wlan': None,
+}
+last_control_server_restart_ms = 0
 
 
 def json_response(payload, status=200):
@@ -64,12 +81,15 @@ def request_json(request, maximum_bytes=12288):
 
 
 def safe_project_file(base_path, request_path):
-    normalized = os.path.normpath('/' + request_path).lstrip('/')
-    full_path = project_path(os.path.join(base_path, normalized))
-    base_full_path = project_path(base_path)
-    if not os.path.abspath(full_path).startswith(os.path.abspath(base_full_path) + os.sep):
-        return None
-    return full_path
+    parts = []
+    for part in request_path.replace('\\', '/').split('/'):
+        if part in ('', '.'):
+            continue
+        if part == '..':
+            return None
+        parts.append(part)
+    relative_path = '/'.join(parts)
+    return project_path('/' + base_path.strip('/') + '/' + relative_path)
 
 
 def required_arg(args, name):
@@ -242,7 +262,10 @@ def validate_db_json(path, data):
 def write_json_atomic(file_path, data):
     temp_path = file_path + '.tmp'
     with open(temp_path, 'w') as json_file:
-        json.dump(data, json_file, indent=2)
+        if IS_MICROPYTHON:
+            json.dump(data, json_file)
+        else:
+            json.dump(data, json_file, indent=2)
         json_file.write('\n')
     try:
         os.replace(temp_path, file_path)
@@ -464,6 +487,7 @@ def do_access_point():
 
     ap = network.WLAN(network.AP_IF)
     # ap.active(True)
+    configure_wifi_power(ap)
     ap.config(essid=ssid, password=password)
     ap.active(True)
 
@@ -475,6 +499,7 @@ def do_access_point():
     return ap
 
 def do_connection_management():
+    global network_watchdog
     # make sure we are not connected
     ap = network.WLAN(network.AP_IF)
     ap.disconnect()
@@ -490,10 +515,22 @@ def do_connection_management():
         if wifi['active'] != 0:
             wlan = do_connect(wifi['ssid'], wifi['password'])
             if wlan.isconnected():
+                network_watchdog = {
+                    'mode': 'sta',
+                    'ssid': wifi['ssid'],
+                    'password': wifi['password'],
+                    'wlan': wlan,
+                }
                 break
 
     if not wlan.isconnected():
         wlan = do_access_point()
+        network_watchdog = {
+            'mode': 'ap',
+            'ssid': None,
+            'password': None,
+            'wlan': wlan,
+        }
     return wlan.ifconfig()
 
 def read_profiles(filename):
@@ -503,9 +540,17 @@ def read_profiles(filename):
     print(data['wifis'])        
     return data['wifis']
 
+def configure_wifi_power(wlan):
+    try:
+        wlan.config(pm=0xa11140)
+        print('WiFi power management disabled')
+    except Exception as exc:
+        print('WiFi power management unchanged:', exc)
+
 def do_connect(ssid, password):
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
+    configure_wifi_power(wlan)
     print('Trying to connect to %s...' % ssid)
     wlan.connect(ssid, password)
     for retry in range(200):
@@ -519,6 +564,75 @@ def do_connect(ssid, password):
     else:
         print('\nFailed. Not Connected to: ' + ssid)
     return wlan
+
+
+def network_watchdog_thread():
+    while True:
+        time.sleep(10)
+        state = network_watchdog
+        wlan = state.get('wlan')
+        if state.get('mode') == 'sta' and wlan is not None:
+            try:
+                if not wlan.isconnected():
+                    print('WiFi disconnected; reconnecting...')
+                    wlan.active(False)
+                    time.sleep(1)
+                    wlan.active(True)
+                    configure_wifi_power(wlan)
+                    wlan.connect(state.get('ssid'), state.get('password'))
+                    request_control_server_restart('wifi reconnect')
+            except Exception as exc:
+                print('WiFi watchdog error:', exc)
+
+        if ss.RunningMode:
+            request_control_server_restart('active set maintenance', 60000)
+
+
+def print_exception(exc):
+    if hasattr(sys, 'print_exception'):
+        sys.print_exception(exc)
+    else:
+        print(exc)
+
+
+def request_control_server_restart(reason, minimum_interval_ms=30000):
+    global last_control_server_restart_ms
+    now = time.ticks_ms()
+    if last_control_server_restart_ms and time.ticks_diff(now, last_control_server_restart_ms) < minimum_interval_ms:
+        return
+    last_control_server_restart_ms = now
+    print('Restarting control server:', reason)
+    try:
+        app._rabbit_restart = True
+        app.shutdown_requested = True
+        server = getattr(app, 'server', None)
+        if server is not None:
+            server.close()
+    except Exception as exc:
+        print('Control server restart request failed:', exc)
+
+
+def run_control_server(host, port, debug):
+    while True:
+        try:
+            app._rabbit_restart = False
+            app.shutdown_requested = False
+            print(f'Rabbit server starting on http://{host}:{port}')
+            app.run(host=host, debug=debug, port=port)
+            print('Rabbit server stopped')
+        except Exception as exc:
+            print('Rabbit server crashed:')
+            print_exception(exc)
+        finally:
+            try:
+                server = getattr(app, 'server', None)
+                if server is not None:
+                    server.close()
+            except Exception:
+                pass
+        if IS_EMULATOR:
+            break
+        time.sleep(2)
 
 
 def debug(request):
@@ -1041,6 +1155,7 @@ def start_set_thread(target):
             return False
         if not ss.length_plan_ms:
             raise ValueError('Prep a set before starting.')
+        gc.collect()
         ss.Stopped = False
         ss.RunningMode = True
         _thread.start_new_thread(target, ())
@@ -1137,8 +1252,7 @@ display.show()
 
 default_host = '0.0.0.0' if IS_EMULATOR else '0.0.0.0'
 default_port = 5000 if IS_EMULATOR else 80
-run_host = os.getenv('RABBIT_HOST', default_host)
-run_port = int(os.getenv('RABBIT_PORT', default_port))
-run_debug = os.getenv('RABBIT_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
-print(f'Rabbit server starting on http://{run_host}:{run_port}')
-app.run(host=run_host, debug=run_debug, port=run_port)
+run_host = get_env('RABBIT_HOST', default_host)
+run_port = int(get_env('RABBIT_PORT', default_port))
+run_debug = get_env('RABBIT_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on')
+run_control_server(run_host, run_port, run_debug)
